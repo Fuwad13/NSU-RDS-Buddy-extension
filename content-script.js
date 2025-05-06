@@ -297,13 +297,6 @@
         </td>
         <td>
           <div class="btn-group btn-group-sm">
-            ${
-              isOriginalCourse
-                ? `<button class="reset-course btn btn-warning btn-sm" data-idx="${i}" data-code="${c.code}" title="Reset to original grade">
-                <span class="glyphicon glyphicon-refresh"></span>
-              </button>`
-                : ""
-            }
             <button class="remove-course btn btn-danger btn-sm" data-idx="${i}" title="Remove course">
               <span class="glyphicon glyphicon-trash"></span>
             </button>
@@ -555,31 +548,12 @@
           row.style.borderLeft = "3px solid #ffc107";
           select.style.backgroundColor = "#fff3cd";
           select.style.fontWeight = "bold";
-
-          // Check if reset button already exists, if not add it
-          const btnGroup = row.querySelector(".btn-group");
-          if (!btnGroup.querySelector(".reset-course")) {
-            const resetBtn = document.createElement("button");
-            resetBtn.className = "reset-course btn btn-warning btn-sm";
-            resetBtn.dataset.idx = idx;
-            resetBtn.dataset.code = courseCode;
-            resetBtn.title = "Reset to original grade";
-            resetBtn.innerHTML =
-              '<span class="glyphicon glyphicon-refresh"></span>';
-            btnGroup.insertBefore(resetBtn, btnGroup.firstChild);
-          }
         } else if (isOriginalCourse) {
           // Remove highlighting if grade is same as original
           row.style.backgroundColor = "";
           row.style.borderLeft = "";
           select.style.backgroundColor = "";
           select.style.fontWeight = "";
-
-          // Remove reset button if it exists
-          const resetBtn = row.querySelector(".reset-course");
-          if (resetBtn) {
-            resetBtn.remove();
-          }
         }
       }
     });
@@ -612,12 +586,16 @@
       // Green for improvement
       const delta = (whatIfCGPA - currentCGPA).toFixed(2);
       resultElement.style.color = "#28a745";
-      resultElement.innerHTML = `${whatIfCGPA.toFixed(2)} <span class="badge" style="background-color: #28a745; margin-left: 5px;">+${delta}</span>`;
+      resultElement.innerHTML = `${whatIfCGPA.toFixed(
+        2
+      )} <span class="badge" style="background-color: #28a745; margin-left: 5px;">+${delta}</span>`;
     } else if (whatIfCGPA < currentCGPA) {
       // Red for decline
       const delta = (whatIfCGPA - currentCGPA).toFixed(2);
       resultElement.style.color = "#dc3545";
-      resultElement.innerHTML = `${whatIfCGPA.toFixed(2)} <span class="badge" style="background-color: #dc3545; margin-left: 5px;">${delta}</span>`;
+      resultElement.innerHTML = `${whatIfCGPA.toFixed(
+        2
+      )} <span class="badge" style="background-color: #dc3545; margin-left: 5px;">${delta}</span>`;
     } else {
       // Original blue for no change
       resultElement.style.color = "#4285f4";

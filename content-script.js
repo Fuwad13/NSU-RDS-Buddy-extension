@@ -791,6 +791,7 @@
     const totalCredits = [];
     const courseCounts = [];
     const semesterCredits = [];
+    const semesterGPAs = []; // New array to store individual semester GPAs
 
     // Track cumulative data for CGPA calculation
     let cumulativeCourses = [];
@@ -834,6 +835,7 @@
       totalCredits.push(cumulativeCredits);
       semesterCredits.push(semesterTotalCredits);
       courseCounts.push(semesterCourses.length);
+      semesterGPAs.push(parseFloat(semesterGPA.toFixed(2))); // Add the semester GPA
 
       // Add this semester's courses to our running list
       cumulativeCourses = [...cumulativeCourses, ...semesterCourses];
@@ -845,6 +847,7 @@
       totalCredits,
       courseCounts,
       semesterCredits,
+      semesterGPAs, // Return the semester GPAs array
     };
   }
 
@@ -939,7 +942,7 @@
                 },
                 afterTitle: function (context) {
                   const index = context[0].dataIndex;
-                  return `Courses: ${data.courseCounts[index]}, Semester Credits: ${data.semesterCredits[index]}, Total Credits: ${data.totalCredits[index]}`;
+                  return `Semester GPA: ${data.semesterGPAs[index]}, Courses: ${data.courseCounts[index]}, Semester Credits: ${data.semesterCredits[index]}, Total Credits: ${data.totalCredits[index]}`;
                 },
                 label: function (context) {
                   let label = context.dataset.label || "";

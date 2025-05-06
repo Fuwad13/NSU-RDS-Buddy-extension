@@ -16,7 +16,7 @@
   "content_scripts": [
     {
       "matches": ["https://rds3.northsouth.edu/students/grade_history/*"],
-      "js": ["content-script.js"],
+      "js": ["libs/chart.umd.js", "content-script.js"],
       "run_at": "document_idle"
     }
   ],
@@ -26,5 +26,11 @@
       "16": "icons/gpa16.png",
       "48": "icons/gpa64.png"
     }
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["libs/*"],
+      "matches": ["https://rds3.northsouth.edu/*"]
+    }
+  ]
 }

@@ -188,6 +188,60 @@
 
     // Append to the end of the body
     document.body.appendChild(calculatorContainer);
+
+    // NEW CODE: Add CGPA vs Semester chart container
+    const chartContainer = document.createElement("div");
+    chartContainer.className = "row";
+    chartContainer.style.marginTop = "30px";
+    chartContainer.style.marginBottom = "30px";
+    chartContainer.style.width = "100%";
+    chartContainer.style.maxWidth = "1200px";
+    chartContainer.style.margin = "30px auto";
+
+    // Create panel container for chart
+    const chartPanel = document.createElement("div");
+    chartPanel.id = "cgpa-chart-panel";
+    chartPanel.className = "col-md-12";
+
+    // Set panel HTML
+    chartPanel.innerHTML = `
+      <div class="panel panel-primary">
+        <div class="panel-heading">
+          <h3 class="panel-title">CGPA Progression Chart</h3>
+        </div>
+        <div class="panel-body">
+          <div class="row">
+            <div class="col-md-9">
+              <canvas id="cgpa-chart" style="width: 100%; height: 300px;"></canvas>
+            </div>
+            <div class="col-md-3">
+              <div class="well">
+                <h4>CGPA Trends</h4>
+                <p>This chart shows how your CGPA has progressed over different semesters.</p>
+                <p><small>Hover over each point to see details.</small></p>
+                <div id="chart-stats" style="margin-top: 15px;">
+                  <p>Highest CGPA: <span id="highest-cgpa" style="font-weight: bold;">—</span></p>
+                  <p>Lowest CGPA: <span id="lowest-cgpa" style="font-weight: bold;">—</span></p>
+                  <p>Average CGPA: <span id="average-cgpa" style="font-weight: bold;">—</span></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    chartContainer.appendChild(chartPanel);
+
+    // Get the parent element of calculatorContainer to append the chartContainer after the calculator
+    if (calculatorContainer.parentElement) {
+      calculatorContainer.parentElement.insertBefore(
+        chartContainer,
+        calculatorContainer.nextSibling
+      );
+    } else {
+      document.body.appendChild(chartContainer);
+    }
   }
 
   // ——— C.1 Grade‑to‑point mapping ———
@@ -593,4 +647,347 @@
         whatIfCGPA
     );
   }
+
+  // ——— D.1 Semester vs CGPA Chart ———
+  function initializeChart() {
+    // Make sure the chart container exists before proceeding
+    const chartCanvas = document.getElementById("cgpa-chart");
+    if (!chartCanvas) {
+      console.error("Chart canvas element not found during initialization");
+      // Try to create the container if it doesn't exist yet
+      createChartContainerIfNeeded();
+      return;
+    }
+
+    // Calculate CGPA per semester for the chart
+    const semesterData = calculateSemesterCGPA(originalCourses);
+
+    if (semesterData.semesters.length === 0) {
+      console.log("No valid semester data available for chart");
+      document.getElementById("cgpa-chart-panel").innerHTML =
+        '<div class="alert alert-warning">No semester data available to display in the chart.</div>';
+      return;
+    }
+
+    // Render the chart
+    renderCGPAChart(semesterData);
+
+    // Update statistics
+    updateChartStatistics(semesterData.cgpaValues);
+  }
+
+  // Create chart container if it doesn't exist yet
+  function createChartContainerIfNeeded() {
+    // Check if the chart container already exists
+    if (document.getElementById("cgpa-chart")) {
+      return; // Chart container already exists
+    }
+
+    console.log("Creating chart container");
+    const calculatorContainer = document
+      .querySelector("#whatif-panel")
+      .closest(".row");
+
+    if (!calculatorContainer) {
+      console.error("Could not find calculator container to position chart");
+      return;
+    }
+
+    // Create the chart container
+    const chartContainer = document.createElement("div");
+    chartContainer.className = "row";
+    chartContainer.style.marginTop = "30px";
+    chartContainer.style.marginBottom = "30px";
+    chartContainer.style.width = "100%";
+    chartContainer.style.maxWidth = "1200px";
+    chartContainer.style.margin = "30px auto";
+
+    // Create panel container for chart
+    const chartPanel = document.createElement("div");
+    chartPanel.id = "cgpa-chart-panel";
+    chartPanel.className = "col-md-12";
+
+    // Set panel HTML
+    chartPanel.innerHTML = `
+      <div class="panel panel-primary">
+        <div class="panel-heading">
+          <h3 class="panel-title">CGPA Progression Chart</h3>
+        </div>
+        <div class="panel-body">
+          <div class="row">
+            <div class="col-md-9">
+              <canvas id="cgpa-chart" style="width: 100%; height: 300px;"></canvas>
+            </div>
+            <div class="col-md-3">
+              <div class="well">
+                <h4>CGPA Trends</h4>
+                <p>This chart shows how your CGPA has progressed over different semesters.</p>
+                <p><small>Hover over each point to see details.</small></p>
+                <div id="chart-stats" style="margin-top: 15px;">
+                  <p>Highest CGPA: <span id="highest-cgpa" style="font-weight: bold;">—</span></p>
+                  <p>Lowest CGPA: <span id="lowest-cgpa" style="font-weight: bold;">—</span></p>
+                  <p>Average CGPA: <span id="average-cgpa" style="font-weight: bold;">—</span></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    chartContainer.appendChild(chartPanel);
+
+    // Insert the chart container after the calculator container
+    const parentElement = calculatorContainer.parentElement;
+    if (parentElement) {
+      parentElement.insertBefore(
+        chartContainer,
+        calculatorContainer.nextSibling
+      );
+    } else {
+      document.body.appendChild(chartContainer);
+    }
+  }
+
+  function calculateSemesterCGPA(courses) {
+    // Group courses by semester and year
+    const semesterGroups = {};
+
+    courses.forEach((course) => {
+      if (
+        !course.semester ||
+        !course.year ||
+        !course.grade ||
+        !gradeMap[course.grade]
+      ) {
+        return; // Skip invalid entries
+      }
+
+      const key = `${course.semester} ${course.year}`;
+      if (!semesterGroups[key]) {
+        semesterGroups[key] = [];
+      }
+      semesterGroups[key].push(course);
+    });
+
+    // Calculate CGPA for each semester
+    const semesters = [];
+    const cgpaValues = [];
+    const totalCredits = [];
+    const cumulativeCGPA = [];
+
+    let runningTotalPoints = 0;
+    let runningTotalCredits = 0;
+
+    // Sort semesters chronologically
+    const sortedSemesters = Object.keys(semesterGroups).sort((a, b) => {
+      // Extract year for comparison
+      const yearA = parseInt(a.split(" ")[1]);
+      const yearB = parseInt(b.split(" ")[1]);
+      if (yearA !== yearB) return yearA - yearB;
+
+      // If years are the same, sort by semester
+      const semMap = { Spring: 0, Summer: 1, Fall: 2 };
+      const semA = semMap[a.split(" ")[0]] || 0;
+      const semB = semMap[b.split(" ")[0]] || 0;
+      return semA - semB;
+    });
+
+    sortedSemesters.forEach((semester) => {
+      const courses = semesterGroups[semester];
+
+      // Calculate semester GPA
+      const semPoints = courses.reduce(
+        (sum, c) => sum + (gradeMap[c.grade] || 0) * c.credits,
+        0
+      );
+      const semCredits = courses.reduce((sum, c) => sum + c.credits, 0);
+      const semGPA = semCredits ? (semPoints / semCredits).toFixed(2) : "0.00";
+
+      // Calculate cumulative CGPA
+      runningTotalPoints += semPoints;
+      runningTotalCredits += semCredits;
+      const semCGPA = runningTotalCredits
+        ? (runningTotalPoints / runningTotalCredits).toFixed(2)
+        : "0.00";
+
+      // Store data for chart
+      semesters.push(semester);
+      cgpaValues.push(parseFloat(semGPA));
+      totalCredits.push(semCredits);
+      cumulativeCGPA.push(parseFloat(semCGPA));
+    });
+
+    return {
+      semesters,
+      cgpaValues,
+      totalCredits,
+      cumulativeCGPA,
+    };
+  }
+
+  function renderCGPAChart(data) {
+    const ctx = document.getElementById("cgpa-chart");
+
+    if (!ctx) {
+      console.error("Chart canvas element not found");
+      return;
+    }
+
+    // Check if Chart.js is available
+    if (typeof Chart === "undefined") {
+      console.error("Chart.js library not loaded");
+      document.getElementById("cgpa-chart-panel").innerHTML =
+        '<div class="alert alert-danger">Chart.js library not available. Please refresh the page.</div>';
+      return;
+    }
+
+    try {
+      // Create the chart
+      const cgpaChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: data.semesters,
+          datasets: [
+            {
+              label: "Semester GPA",
+              data: data.cgpaValues,
+              backgroundColor: "rgba(54, 162, 235, 0.2)",
+              borderColor: "rgba(54, 162, 235, 1)",
+              borderWidth: 2,
+              pointBackgroundColor: "rgba(54, 162, 235, 1)",
+              pointRadius: 5,
+              tension: 0.1,
+            },
+            {
+              label: "Cumulative CGPA",
+              data: data.cumulativeCGPA,
+              backgroundColor: "rgba(255, 99, 132, 0.2)",
+              borderColor: "rgba(255, 99, 132, 1)",
+              borderWidth: 3,
+              pointBackgroundColor: "rgba(255, 99, 132, 1)",
+              pointRadius: 5,
+              tension: 0.1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: false,
+              min: 0,
+              max: 4.0,
+              title: {
+                display: true,
+                text: "CGPA",
+              },
+            },
+            x: {
+              title: {
+                display: true,
+                text: "Semester",
+              },
+            },
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                afterTitle: function (context) {
+                  const index = context[0].dataIndex;
+                  return `Credits: ${data.totalCredits[index]}`;
+                },
+                label: function (context) {
+                  let label = context.dataset.label || "";
+                  if (label) {
+                    label += ": ";
+                  }
+                  if (context.parsed.y !== null) {
+                    label += context.parsed.y.toFixed(2);
+                  }
+                  return label;
+                },
+              },
+            },
+            legend: {
+              position: "top",
+            },
+            title: {
+              display: true,
+              text: "CGPA Progression by Semester",
+            },
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Error creating chart:", error);
+      if (document.getElementById("cgpa-chart-panel")) {
+        document.getElementById("cgpa-chart-panel").innerHTML =
+          '<div class="alert alert-danger">Failed to create chart. Error: ' +
+          error.message +
+          "</div>";
+      }
+    }
+  }
+
+  function updateChartStatistics(cgpaValues) {
+    if (cgpaValues.length === 0) return;
+
+    const statsElements = {
+      highest: document.getElementById("highest-cgpa"),
+      lowest: document.getElementById("lowest-cgpa"),
+      average: document.getElementById("average-cgpa"),
+    };
+
+    // Check if elements exist
+    if (
+      !statsElements.highest ||
+      !statsElements.lowest ||
+      !statsElements.average
+    ) {
+      console.error("Stats elements not found");
+      return;
+    }
+
+    // Calculate statistics
+    const highest = Math.max(...cgpaValues).toFixed(2);
+    const lowest = Math.min(...cgpaValues).toFixed(2);
+    const average = (
+      cgpaValues.reduce((a, b) => a + b, 0) / cgpaValues.length
+    ).toFixed(2);
+
+    // Update the DOM
+    statsElements.highest.textContent = highest;
+    statsElements.lowest.textContent = lowest;
+    statsElements.average.textContent = average;
+  }
+
+  // Initialize the chart after the page has fully loaded
+  // Use a more reliable approach with multiple attempts if needed
+  function attemptChartInitialization(attemptsLeft = 3) {
+    if (document.getElementById("cgpa-chart")) {
+      console.log("Chart container found, initializing chart");
+      initializeChart();
+    } else if (attemptsLeft > 0) {
+      console.log(
+        `Chart container not found yet, ${attemptsLeft} attempts left`
+      );
+      createChartContainerIfNeeded();
+      setTimeout(() => attemptChartInitialization(attemptsLeft - 1), 500);
+    } else {
+      console.error(
+        "Failed to find or create chart container after multiple attempts"
+      );
+    }
+  }
+
+  // Start the chart initialization process when page is fully loaded
+  window.addEventListener("load", function () {
+    console.log("Window loaded, starting chart initialization");
+    // Try to create the chart container first
+    createChartContainerIfNeeded();
+    // Then attempt to initialize the chart with a delay and retry mechanism
+    setTimeout(() => attemptChartInitialization(), 1000);
+  });
 })();

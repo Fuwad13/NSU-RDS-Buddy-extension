@@ -750,79 +750,101 @@
   }
 
   function calculateSemesterCGPA(courses) {
-    // Group courses by semester and year
-    const semesterGroups = {};
+    // Create a deep copy of the original courses to ensure we don't modify them
+    const coursesCopy = JSON.parse(JSON.stringify(courses));
+    // Fill up null values in the array
+    coursesCopy.forEach((course, index) => {
+      if (index > 0) {
+        const prevCourse = coursesCopy[index - 1];
+        if (!course.semester) course.semester = prevCourse.semester;
+        if (!course.year) course.year = prevCourse.year;
+      }
+    });
+    console.log(coursesCopy);
 
-    courses.forEach((course) => {
-      if (
-        !course.semester ||
-        !course.year ||
-        !course.grade ||
-        !gradeMap[course.grade]
-      ) {
-        return; // Skip invalid entries
+    // Group courses by semester and year while preserving original order
+    const semesterGroups = {};
+    const semesterOrder = [];
+
+    coursesCopy.forEach((course) => {
+      if (!course.grade || !gradeMap[course.grade]) {
+        return; // Skip courses with no grade or invalid grade
       }
 
-      const key = `${course.semester} ${course.year}`;
+      const key =
+        course.semester && course.year
+          ? `${course.semester} ${course.year}`
+          : "Unknown";
+
       if (!semesterGroups[key]) {
         semesterGroups[key] = [];
+        // Add to order list only once when we first see this semester
+        semesterOrder.push(key);
       }
+
       semesterGroups[key].push(course);
     });
 
-    // Calculate CGPA for each semester
+    // Arrays for chart data
     const semesters = [];
     const cgpaValues = [];
     const totalCredits = [];
-    const cumulativeCGPA = [];
+    const courseCounts = [];
+    const semesterCredits = [];
 
-    let runningTotalPoints = 0;
-    let runningTotalCredits = 0;
+    // Track cumulative data for CGPA calculation
+    let cumulativeCourses = [];
+    let cumulativePoints = 0;
+    let cumulativeCredits = 0;
 
-    // Sort semesters chronologically
-    const sortedSemesters = Object.keys(semesterGroups).sort((a, b) => {
-      // Extract year for comparison
-      const yearA = parseInt(a.split(" ")[1]);
-      const yearB = parseInt(b.split(" ")[1]);
-      if (yearA !== yearB) return yearA - yearB;
+    // Process semesters in the order they appear in the transcript
+    semesterOrder.forEach((semesterKey) => {
+      const semesterCourses = semesterGroups[semesterKey];
 
-      // If years are the same, sort by semester
-      const semMap = { Spring: 0, Summer: 1, Fall: 2 };
-      const semA = semMap[a.split(" ")[0]] || 0;
-      const semB = semMap[b.split(" ")[0]] || 0;
-      return semA - semB;
-    });
+      // Calculate per-semester statistics
+      let semesterTotalCredits = 0;
+      let semesterTotalPoints = 0;
 
-    sortedSemesters.forEach((semester) => {
-      const courses = semesterGroups[semester];
+      semesterCourses.forEach((course) => {
+        if (course.grade && gradeMap[course.grade] !== undefined) {
+          const coursePoints = gradeMap[course.grade] * course.credits;
 
-      // Calculate semester GPA
-      const semPoints = courses.reduce(
-        (sum, c) => sum + (gradeMap[c.grade] || 0) * c.credits,
-        0
-      );
-      const semCredits = courses.reduce((sum, c) => sum + c.credits, 0);
-      const semGPA = semCredits ? (semPoints / semCredits).toFixed(2) : "0.00";
+          // Add to semester totals
+          semesterTotalPoints += coursePoints;
+          semesterTotalCredits += course.credits;
 
-      // Calculate cumulative CGPA
-      runningTotalPoints += semPoints;
-      runningTotalCredits += semCredits;
-      const semCGPA = runningTotalCredits
-        ? (runningTotalPoints / runningTotalCredits).toFixed(2)
-        : "0.00";
+          // Add to cumulative totals
+          cumulativePoints += coursePoints;
+          cumulativeCredits += course.credits;
+        }
+      });
 
-      // Store data for chart
-      semesters.push(semester);
-      cgpaValues.push(parseFloat(semGPA));
-      totalCredits.push(semCredits);
-      cumulativeCGPA.push(parseFloat(semCGPA));
+      // Calculate semester GPA and cumulative GPA
+      const semesterGPA =
+        semesterTotalCredits > 0
+          ? semesterTotalPoints / semesterTotalCredits
+          : 0;
+
+      const cgpa =
+        cumulativeCredits > 0 ? cumulativePoints / cumulativeCredits : 0;
+
+      // Add all data points for this semester
+      semesters.push(semesterKey);
+      cgpaValues.push(parseFloat(cgpa.toFixed(2)));
+      totalCredits.push(cumulativeCredits);
+      semesterCredits.push(semesterTotalCredits);
+      courseCounts.push(semesterCourses.length);
+
+      // Add this semester's courses to our running list
+      cumulativeCourses = [...cumulativeCourses, ...semesterCourses];
     });
 
     return {
       semesters,
       cgpaValues,
       totalCredits,
-      cumulativeCGPA,
+      courseCounts,
+      semesterCredits,
     };
   }
 
@@ -850,7 +872,7 @@
           labels: data.semesters,
           datasets: [
             {
-              label: "Semester GPA",
+              label: "CGPA",
               data: data.cgpaValues,
               backgroundColor: "rgba(54, 162, 235, 0.2)",
               borderColor: "rgba(54, 162, 235, 1)",
@@ -858,16 +880,7 @@
               pointBackgroundColor: "rgba(54, 162, 235, 1)",
               pointRadius: 5,
               tension: 0.1,
-            },
-            {
-              label: "Cumulative CGPA",
-              data: data.cumulativeCGPA,
-              backgroundColor: "rgba(255, 99, 132, 0.2)",
-              borderColor: "rgba(255, 99, 132, 1)",
-              borderWidth: 3,
-              pointBackgroundColor: "rgba(255, 99, 132, 1)",
-              pointRadius: 5,
-              tension: 0.1,
+              fill: true, // Fill area under the curve
             },
           ],
         },
@@ -878,10 +891,36 @@
             y: {
               beginAtZero: false,
               min: 0,
-              max: 4.0,
+              max: 4.0, // Extended slightly above 4.0 for better visibility
+              suggestedMax: 4.0, // Ensure we see above 4.0
+              ticks: {
+                callback: function (value, index, values) {
+                  // Only show tick labels up to 4.0
+                  return value <= 4.0 ? value.toFixed(1) : "";
+                },
+                stepSize: 0.5,
+              },
               title: {
                 display: true,
                 text: "CGPA",
+              },
+              grid: {
+                color: function (context) {
+                  // Make the grid line at y=4 black and thicker
+                  if (context.tick && context.tick.value === 4) {
+                    return "rgba(0, 0, 0, 0.8)";
+                  }
+                  // Regular grid lines
+                  return "rgba(0, 0, 0, 0.1)";
+                },
+                lineWidth: function (context) {
+                  // Make the grid line at y=4 thicker
+                  if (context.tick && context.tick.value === 4) {
+                    return 1.5;
+                  }
+                  // Regular grid line width
+                  return 1;
+                },
               },
             },
             x: {
@@ -894,9 +933,13 @@
           plugins: {
             tooltip: {
               callbacks: {
+                title: function (context) {
+                  const index = context[0].dataIndex;
+                  return data.semesters[index] || "Unknown Semester";
+                },
                 afterTitle: function (context) {
                   const index = context[0].dataIndex;
-                  return `Credits: ${data.totalCredits[index]}`;
+                  return `Courses: ${data.courseCounts[index]}, Semester Credits: ${data.semesterCredits[index]}, Total Credits: ${data.totalCredits[index]}`;
                 },
                 label: function (context) {
                   let label = context.dataset.label || "";

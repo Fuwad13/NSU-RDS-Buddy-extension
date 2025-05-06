@@ -1,4 +1,3 @@
-// content-script.js
 (() => {
   // 1. Grab the three grade‐history tables in order
   const tables = document.querySelectorAll(".hist-grades table");
@@ -98,7 +97,8 @@
               </div>
               <div class="col-md-4">
                 <div class="well">
-                  <p>Wondering how your grades will affect your CGPA? Use this tool to simulate different grades and see how they impact your overall GPA.</p>
+                  <p>Wondering how your grades will affect your CGPA? Use this tool to simulate different grades and see how they impact your overall GPA.
+                  You can also add new courses with grades to see how much that grade affects your current CGPA</p>
                 </div>
               </div>
               <div class="col-md-4">
@@ -107,7 +107,7 @@
                   <p>Current CGPA: <span id="current-cgpa" style="font-weight: bold;">—</span></p>
                   <p>What-If CGPA: <span id="whatif-result" style="font-weight: bold; color: #4285f4; font-size: 1.2em;">—</span></p>
                   <hr>
-                  <p><small>Make changes to the grades and credit hours to see how they affect your CGPA.</small></p>
+                  <p><small>Make changes to the grades of existing courses or add new courses to see how they affect your CGPA.</small></p>
                 </div>
               </div>
             </div>
@@ -139,6 +139,7 @@
   // Fallback function to insert after all content
   function insertAfterOriginalContent() {
     // Create a container for our calculator
+    console.log("Inserting calculator at the end of the body");
     const calculatorContainer = document.createElement("div");
     calculatorContainer.className = "row";
     calculatorContainer.style.marginTop = "30px";
@@ -205,7 +206,8 @@
   };
 
   // Store the original courses for current CGPA calculation
-  const originalCourses = [...semesterCourses];
+  // Create a deep copy to ensure originalCourses never changes
+  const originalCourses = JSON.parse(JSON.stringify(semesterCourses));
 
   // ——— C.2 CGPA calculation fns ———
   function calcCurrentCgpa() {
@@ -268,6 +270,7 @@
 
       // Apply highlight styling if grade changed
       if (isGradeChanged) {
+        console.log("Test debug");
         row.style.backgroundColor = "#fff3cd"; // Light yellow background
         row.style.borderLeft = "3px solid #ffc107"; // Yellow border
       }
@@ -346,37 +349,13 @@
       renderInputs(semesterCourses);
       update();
     }
-
-    // For reset individual course buttons
-    if (
-      e.target.classList.contains("reset-course") ||
-      e.target.closest(".reset-course")
-    ) {
-      const button = e.target.classList.contains("reset-course")
-        ? e.target
-        : e.target.closest(".reset-course");
-      const idx = parseInt(button.dataset.idx);
-      const courseCode = button.getAttribute("data-code");
-
-      if (courseCode) {
-        // Find the matching original course
-        const originalCourse = originalCourses.find(
-          (oc) => oc.code === courseCode
-        );
-
-        if (originalCourse && idx >= 0 && idx < semesterCourses.length) {
-          // Reset only this specific course's grade to original
-          semesterCourses[idx].grade = originalCourse.grade;
-          renderInputs(semesterCourses);
-          update();
-        }
-      }
-    }
   });
 
   // Reset button functionality
   document.getElementById("reset-grades").addEventListener("click", () => {
     // Reset semesterCourses to the original state
+    console.log("Resetting to original courses");
+    console.log(originalCourses);
     semesterCourses = JSON.parse(JSON.stringify(originalCourses));
     renderInputs(semesterCourses);
     // Use the cached CGPA value for consistency

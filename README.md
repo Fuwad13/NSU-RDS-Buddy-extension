@@ -1,8 +1,20 @@
 # NSU-RDS-Buddy-extension
 
-A Chrome extension that enhances the North South University (NSU) RDS portal with additional features to help students manage their academic records, analyze performance trends, and plan for future semesters.
+A Chrome extension that enhances the North South University (NSU) Results & Data Services (RDS) portal with additional features to help students manage their academic records, analyze performance trends, and plan for future semesters.
 
 ![NSU RDS Buddy Extension](icons/gpa128.png)
+
+## Screenshots
+
+### What-If CGPA Calculator
+
+![What-If CGPA Calculator](screenshots/what-if-calculator.png)
+_The What-If Calculator allows you to simulate grade changes and immediately see the impact on your CGPA_
+
+### CGPA Progression Chart
+
+![CGPA Progression Chart](screenshots/cgpa-chart.png)
+_Track your academic performance over time with the interactive CGPA progression chart_
 
 ## Features
 

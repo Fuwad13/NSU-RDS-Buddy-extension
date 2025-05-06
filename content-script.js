@@ -359,6 +359,13 @@
         </td>
         <td>
           <div class="btn-group btn-group-sm">
+            ${
+              isGradeChanged
+                ? `<button class="reset-grade btn btn-warning btn-sm" data-idx="${i}" data-original-grade="${originalCourse.grade}" title="Reset to original grade">
+                <span class="glyphicon glyphicon-refresh"></span>
+              </button>`
+                : ""
+            }
             <button class="remove-course btn btn-danger btn-sm" data-idx="${i}" title="Remove course">
               <span class="glyphicon glyphicon-trash"></span>
             </button>
@@ -402,6 +409,27 @@
       semesterCourses.splice(idx, 1);
       renderInputs(semesterCourses);
       update();
+    }
+
+    // For reset individual course grade buttons
+    if (
+      e.target.classList.contains("reset-grade") ||
+      e.target.closest(".reset-grade")
+    ) {
+      const button = e.target.classList.contains("reset-grade")
+        ? e.target
+        : e.target.closest(".reset-grade");
+      const idx = parseInt(button.dataset.idx);
+      const originalGrade = button.dataset.originalGrade;
+
+      // Reset the grade in the semesterCourses array
+      if (idx >= 0 && idx < semesterCourses.length) {
+        semesterCourses[idx].grade = originalGrade;
+
+        // Re-render the inputs and update the calculation
+        renderInputs(semesterCourses);
+        update();
+      }
     }
   });
 
@@ -586,12 +614,36 @@
           row.style.borderLeft = "3px solid #ffc107";
           select.style.backgroundColor = "#fff3cd";
           select.style.fontWeight = "bold";
+
+          // Check if reset button exists
+          const actionsCell = row.querySelector("td:last-child .btn-group");
+          let resetButton = actionsCell.querySelector(".reset-grade");
+
+          // If the button doesn't exist, create it
+          if (!resetButton) {
+            resetButton = document.createElement("button");
+            resetButton.className = "reset-grade btn btn-warning btn-sm";
+            resetButton.dataset.idx = idx;
+            resetButton.dataset.originalGrade = originalCourse.grade;
+            resetButton.title = "Reset to original grade";
+            resetButton.innerHTML =
+              '<span class="glyphicon glyphicon-refresh"></span>';
+
+            // Insert as the first child in the btn-group
+            actionsCell.insertBefore(resetButton, actionsCell.firstChild);
+          }
         } else if (isOriginalCourse) {
           // Remove highlighting if grade is same as original
           row.style.backgroundColor = "";
           row.style.borderLeft = "";
           select.style.backgroundColor = "";
           select.style.fontWeight = "";
+
+          // Remove the reset button if it exists
+          const resetButton = row.querySelector(".reset-grade");
+          if (resetButton) {
+            resetButton.remove();
+          }
         }
       }
     });

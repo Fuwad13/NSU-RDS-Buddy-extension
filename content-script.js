@@ -98,6 +98,11 @@
               </div>
               <div class="col-md-4">
                 <div class="well">
+                  <p>Wondering how your grades will affect your CGPA? Use this tool to simulate different grades and see how they impact your overall GPA.</p>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="well">
                   <h4>CGPA Calculation</h4>
                   <p>Current CGPA: <span id="current-cgpa" style="font-weight: bold;">—</span></p>
                   <p>What-If CGPA: <span id="whatif-result" style="font-weight: bold; color: #4285f4; font-size: 1.2em;">—</span></p>
@@ -448,7 +453,7 @@
               Please fill in all required fields.
             </div>
             <div class="text-right">
-              <button type="button" class="btn btn-default" id="cancel-add-course">Cancel</button>
+              <button type="button" class="btn btn-danger" id="cancel-add-course">Cancel</button>
               <button type="submit" class="btn btn-primary" id="confirm-add-course">Add Course</button>
             </div>
           </form>

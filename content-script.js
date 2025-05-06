@@ -868,6 +868,34 @@
     }
 
     try {
+      // Calculate appropriate min and max values for y-axis to create a zoomed-in effect
+      const cgpaValues = data.cgpaValues;
+      if (!cgpaValues || cgpaValues.length === 0) {
+        console.error("No CGPA values available for chart");
+        return;
+      }
+
+      // Find the min and max CGPA values
+      const minCGPA = Math.min(...cgpaValues);
+      const maxCGPA = Math.max(...cgpaValues);
+
+      // Calculate a better y-axis range with buffer space (zoom in on the relevant range)
+      // Use a buffer of 0.2 or 15% of the range, whichever is larger
+      const range = maxCGPA - minCGPA;
+      const buffer = Math.max(0.2, range * 0.15);
+
+      // Set limits, ensuring we don't go below 0 or above 4.0
+      const yMin = Math.max(0, Math.floor((minCGPA - buffer) * 10) / 10);
+      const yMax = Math.min(4.0, Math.ceil((maxCGPA + buffer) * 10) / 10);
+
+      // Determine appropriate step size based on the visible range
+      const visibleRange = yMax - yMin;
+      let stepSize = 0.5; // default
+
+      if (visibleRange <= 0.5) stepSize = 0.1;
+      else if (visibleRange <= 1) stepSize = 0.2;
+      else if (visibleRange <= 2) stepSize = 0.25;
+
       // Create the chart
       const cgpaChart = new Chart(ctx, {
         type: "line",
@@ -893,15 +921,13 @@
           scales: {
             y: {
               beginAtZero: false,
-              min: 0,
-              max: 4.0, // Extended slightly above 4.0 for better visibility
-              suggestedMax: 4.0, // Ensure we see above 4.0
+              min: yMin,
+              max: yMax,
               ticks: {
                 callback: function (value, index, values) {
-                  // Only show tick labels up to 4.0
-                  return value <= 4.0 ? value.toFixed(1) : "";
+                  return value.toFixed(1);
                 },
-                stepSize: 0.5,
+                stepSize: stepSize,
               },
               title: {
                 display: true,

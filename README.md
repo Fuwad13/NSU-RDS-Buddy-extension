@@ -8,12 +8,12 @@ A Chrome extension that enhances the North South University (NSU) Results & Data
 
 ### What-If CGPA Calculator
 
-![What-If CGPA Calculator](screenshots/what-if-calculator.png)
+![What-If CGPA Calculator](images/what-if-calculator.png)
 _The What-If Calculator allows you to simulate grade changes and immediately see the impact on your CGPA_
 
 ### CGPA Progression Chart
 
-![CGPA Progression Chart](screenshots/cgpa-chart.png)
+![CGPA Progression Chart](images/cgpa-chart.png)
 _Track your academic performance over time with the interactive CGPA progression chart_
 
 ## Features

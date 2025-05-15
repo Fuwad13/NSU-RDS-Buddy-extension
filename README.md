@@ -94,7 +94,6 @@ This extension:
 
 - `manifest.json`: Extension configuration
 - `content-script.js`: Main functionality that runs on the RDS page
-- `background.js`: Background script for extension management
 - `popup.html`/`popup.js`: Extension popup interface
 - `styles/`: CSS stylesheets
 - `libs/`: Third-party libraries

@@ -1,16 +1,13 @@
 (() => {
-  // 1. Grab the three grade‐history tables in order
   const tables = document.querySelectorAll(".hist-grades table");
   const [waiverTable, transferTable, semesterTable] = tables;
 
-  // 2. Utility to parse a table given a mapper fn
   function parseTable(table, mapRowFn) {
     return Array.from(table.querySelectorAll("tbody tr"))
       .filter((row) => !row.classList.contains("divider-td"))
       .map(mapRowFn);
   }
 
-  // 3. Parse Waiver Courses (cols: code, credits, title, grade)
   const waiverCourses = parseTable(waiverTable, (row) => {
     const [codeTd, creditTd, titleTd, gradeTd] = row.querySelectorAll("td");
     return {
@@ -21,7 +18,6 @@
     };
   });
 
-  // 4. Parse Transfer Courses (cols: code, credits, title)
   const transferCourses = parseTable(transferTable, (row) => {
     const [codeTd, creditTd, titleTd] = row.querySelectorAll("td");
     return {
@@ -31,7 +27,6 @@
     };
   });
 
-  // 5. Parse Semester Courses (cols: semester, year, code, section, facultyCode, facultyName, credit, title, grade, crCount, crPassed)
   let semesterCourses = parseTable(semesterTable, (row) => {
     const cols = row.querySelectorAll("td");
     return {
@@ -49,25 +44,17 @@
     };
   });
 
-  // 6. Now you have three arrays you can use to calculate CGPA, inject UI, etc.
-  // console.log({ waiverCourses, transferCourses, semesterCourses });
-
-  // ——— B.1 Create container at the end of the page ———
-  // Find the last element on the page to insert our calculator after it
-  // First try to find the grade history tables container
   let targetElement = document.querySelector(".hist-grades");
 
-  // If we found the container, get its parent to append after all original content
   if (targetElement) {
     console.log("Found grade history container, inserting calculator after it");
-    // Find the main container that holds all content
+
     let mainContainer =
       targetElement.closest(".container-fluid") ||
       targetElement.closest(".container") ||
       targetElement.parentElement;
 
     if (mainContainer) {
-      // Create our calculator container
       const calculatorContainer = document.createElement("div");
       calculatorContainer.className = "row";
       calculatorContainer.style.marginTop = "30px";
@@ -75,12 +62,10 @@
       calculatorContainer.style.borderTop = "2px solid #ddd";
       calculatorContainer.style.paddingTop = "20px";
 
-      // Create panel container inside the calculator container
       const panel = document.createElement("div");
       panel.id = "whatif-panel";
       panel.className = "col-md-12";
 
-      // ——— B.2 Build enhanced panel HTML ———
       panel.innerHTML = `
         <div class="panel panel-primary">
           <div class="panel-heading">
@@ -115,30 +100,21 @@
         </div>
       `;
 
-      // Append panel to the calculator container
       calculatorContainer.appendChild(panel);
-
-      // Insert the calculator as the last child of the main container
-      // This ensures it appears after all original content
       mainContainer.appendChild(calculatorContainer);
     } else {
-      // Fallback - append to body
       console.error(
         "Could not find suitable parent container, appending to body"
       );
       insertAfterOriginalContent();
     }
   } else {
-    // Fallback method if we can't find the grade history tables
     console.log(
       "Grade history container not found, using alternative insertion method"
     );
     insertAfterOriginalContent();
   }
-
-  // Fallback function to insert after all content
   function insertAfterOriginalContent() {
-    // Create a container for our calculator
     console.log("Inserting calculator at the end of the body");
     const calculatorContainer = document.createElement("div");
     calculatorContainer.className = "row";
@@ -150,12 +126,10 @@
     calculatorContainer.style.maxWidth = "1200px";
     calculatorContainer.style.margin = "30px auto";
 
-    // Create panel container
     const panel = document.createElement("div");
     panel.id = "whatif-panel";
     panel.className = "col-md-12";
 
-    // Set panel HTML
     panel.innerHTML = `
       <div class="panel panel-primary">
         <div class="panel-heading">
@@ -186,10 +160,8 @@
 
     calculatorContainer.appendChild(panel);
 
-    // Append to the end of the body
     document.body.appendChild(calculatorContainer);
 
-    // NEW CODE: Add CGPA vs Semester chart container
     const chartContainer = document.createElement("div");
     chartContainer.className = "row";
     chartContainer.style.marginTop = "30px";
@@ -198,12 +170,10 @@
     chartContainer.style.maxWidth = "1200px";
     chartContainer.style.margin = "30px auto";
 
-    // Create panel container for chart
     const chartPanel = document.createElement("div");
     chartPanel.id = "cgpa-chart-panel";
     chartPanel.className = "col-md-12";
 
-    // Set panel HTML
     chartPanel.innerHTML = `
       <div class="panel panel-primary">
         <div class="panel-heading">
@@ -233,7 +203,6 @@
 
     chartContainer.appendChild(chartPanel);
 
-    // Get the parent element of calculatorContainer to append the chartContainer after the calculator
     if (calculatorContainer.parentElement) {
       calculatorContainer.parentElement.insertBefore(
         chartContainer,
@@ -244,7 +213,6 @@
     }
   }
 
-  // ——— C.1 Grade‑to‑point mapping ———
   const gradeMap = {
     A: 4.0,
     "A-": 3.7,
@@ -259,13 +227,9 @@
     F: 0.0,
   };
 
-  // Store the original courses for current CGPA calculation
-  // Create a deep copy to ensure originalCourses never changes
   const originalCourses = JSON.parse(JSON.stringify(semesterCourses));
 
-  // ——— C.2 CGPA calculation fns ———
   function calcCurrentCgpa() {
-    // Always use the original courses for current CGPA
     const validCourses = originalCourses.filter(
       (c) => c.grade && gradeMap[c.grade] !== undefined
     );
@@ -277,7 +241,6 @@
     return totalCredits ? (totalPoints / totalCredits).toFixed(2) : "—";
   }
 
-  // Cache the calculated current CGPA so it's consistent throughout the session
   const currentCGPAValue = calcCurrentCgpa();
 
   function calcWhatIfCgpa(courses) {
@@ -289,12 +252,10 @@
     return totalCredits ? (totalPoints / totalCredits).toFixed(2) : "—";
   }
 
-  // ——— C.3 Render inputs & attach listeners ———
   function renderInputs(courses) {
     const container = document.getElementById("course-inputs-container");
     container.innerHTML = ""; // clear
 
-    // Create table
     const table = document.createElement("table");
     table.className = "table table-striped table-hover";
     table.innerHTML = `
@@ -315,14 +276,11 @@
     courses.forEach((c, i) => {
       const row = document.createElement("tr");
 
-      // Check if this is an original course or a newly added one
       const isOriginalCourse = originalCourses.some((oc) => oc.code === c.code);
 
-      // Check if the grade has been changed from original
       const originalCourse = originalCourses.find((oc) => oc.code === c.code);
       const isGradeChanged = originalCourse && originalCourse.grade !== c.grade;
 
-      // Apply highlight styling if grade changed
       if (isGradeChanged) {
         console.log("Test debug");
         row.style.backgroundColor = "#fff3cd"; // Light yellow background

@@ -229,26 +229,108 @@
 
   const originalCourses = JSON.parse(JSON.stringify(semesterCourses));
 
+  // Debug function to log course filtering results
+  function logCoursesFiltering(original, filtered) {
+    console.log(
+      `Original courses: ${original.length}, Filtered courses: ${filtered.length}`
+    );
+
+    if (original.length !== filtered.length) {
+      console.log("Detected repeated courses:");
+
+      // Find courses that appear multiple times in the original list
+      const courseCounts = {};
+      original.forEach((course) => {
+        if (!courseCounts[course.code]) {
+          courseCounts[course.code] = 1;
+        } else {
+          courseCounts[course.code]++;
+        }
+      });
+
+      // Log the repeated courses and their best grades
+      Object.keys(courseCounts).forEach((code) => {
+        if (courseCounts[code] > 1) {
+          const instances = original.filter((c) => c.code === code);
+          const keptCourse = filtered.find((c) => c.code === code);
+
+          console.log(`Course ${code} appeared ${courseCounts[code]} times:`);
+          instances.forEach((course) => {
+            console.log(
+              `  - Grade: ${course.grade} (${
+                gradeMap[course.grade]
+              }), Credits: ${course.credits}`
+            );
+          });
+          console.log(
+            `  Kept grade: ${keptCourse.grade} (${gradeMap[keptCourse.grade]})`
+          );
+        }
+      });
+    }
+  }
+
+  // Update the filterRepeatedCourses function to include logging
+  function filterRepeatedCourses(courses) {
+    const courseMap = new Map();
+
+    courses.forEach((course) => {
+      if (!course.grade || gradeMap[course.grade] === undefined) {
+        return; // Skip courses with no grade or invalid grade
+      }
+
+      const courseCode = course.code;
+      const currentGradeValue = gradeMap[course.grade];
+
+      if (!courseMap.has(courseCode)) {
+        courseMap.set(courseCode, course);
+      } else {
+        // If we already have this course, keep the one with better grade
+        const existingCourse = courseMap.get(courseCode);
+        const existingGradeValue = gradeMap[existingCourse.grade];
+
+        if (currentGradeValue > existingGradeValue) {
+          courseMap.set(courseCode, course);
+        }
+      }
+    });
+
+    const result = Array.from(courseMap.values());
+
+    // Only log if there's a difference in length (indicating filtered courses)
+    if (courses.length !== result.length) {
+      logCoursesFiltering(courses, result);
+    }
+
+    return result;
+  }
+
   function calcCurrentCgpa() {
     const validCourses = originalCourses.filter(
       (c) => c.grade && gradeMap[c.grade] !== undefined
     );
-    const totalPoints = validCourses.reduce(
+
+    // Filter out repeated courses and keep only the best grade
+    const uniqueCourses = filterRepeatedCourses(validCourses);
+
+    const totalPoints = uniqueCourses.reduce(
       (sum, c) => sum + (gradeMap[c.grade] || 0) * c.credits,
       0
     );
-    const totalCredits = validCourses.reduce((sum, c) => sum + c.credits, 0);
+    const totalCredits = uniqueCourses.reduce((sum, c) => sum + c.credits, 0);
     return totalCredits ? (totalPoints / totalCredits).toFixed(2) : "—";
   }
 
   const currentCGPAValue = calcCurrentCgpa();
-
   function calcWhatIfCgpa(courses) {
-    const totalPoints = courses.reduce(
+    // Filter out repeated courses and keep only the best grade
+    const uniqueCourses = filterRepeatedCourses(courses);
+
+    const totalPoints = uniqueCourses.reduce(
       (sum, c) => sum + (gradeMap[c.grade] || 0) * c.credits,
       0
     );
-    const totalCredits = courses.reduce((sum, c) => sum + c.credits, 0);
+    const totalCredits = uniqueCourses.reduce((sum, c) => sum + c.credits, 0);
     return totalCredits ? (totalPoints / totalCredits).toFixed(2) : "—";
   }
 
@@ -339,9 +421,17 @@
 
   // initial render
   renderInputs(semesterCourses);
-
   // Set the initial what-if CGPA to be the same as current CGPA
   document.getElementById("whatif-result").innerText = currentCGPAValue;
+
+  // Log the original vs filtered courses for initial CGPA calculation
+  const validOriginalCourses = originalCourses.filter(
+    (c) => c.grade && gradeMap[c.grade] !== undefined
+  );
+  const uniqueOriginalCourses = filterRepeatedCourses(validOriginalCourses);
+  console.log(
+    `CGPA calculation: Using ${uniqueOriginalCourses.length} unique courses out of ${validOriginalCourses.length} total courses with valid grades`
+  );
 
   // event delegation
   document.getElementById("whatif-panel").addEventListener("change", (e) => {
@@ -758,10 +848,10 @@
       document.body.appendChild(chartContainer);
     }
   }
-
   function calculateSemesterCGPA(courses) {
     // Create a deep copy of the original courses to ensure we don't modify them
     const coursesCopy = JSON.parse(JSON.stringify(courses));
+
     // Fill up null values in the array
     coursesCopy.forEach((course, index) => {
       if (index > 0) {
@@ -770,7 +860,8 @@
         if (!course.year) course.year = prevCourse.year;
       }
     });
-    console.log(coursesCopy);
+
+    console.log("Original courses:", coursesCopy);
 
     // Group courses by semester and year while preserving original order
     const semesterGroups = {};
@@ -806,26 +897,37 @@
     // Track cumulative data for CGPA calculation
     let cumulativeCourses = [];
     let cumulativePoints = 0;
-    let cumulativeCredits = 0;
-
-    // Process semesters in the order they appear in the transcript
+    let cumulativeCredits = 0; // Process semesters in the order they appear in the transcript
     semesterOrder.forEach((semesterKey) => {
       const semesterCourses = semesterGroups[semesterKey];
 
-      // Calculate per-semester statistics
+      // Calculate semester-specific statistics (GPA for just this semester)
+      // For semester GPA, we filter repeated courses within this semester only
+      const uniqueSemesterCourses = filterRepeatedCourses(semesterCourses);
+
       let semesterTotalCredits = 0;
       let semesterTotalPoints = 0;
 
-      semesterCourses.forEach((course) => {
+      uniqueSemesterCourses.forEach((course) => {
         if (course.grade && gradeMap[course.grade] !== undefined) {
           const coursePoints = gradeMap[course.grade] * course.credits;
-
-          // Add to semester totals
           semesterTotalPoints += coursePoints;
           semesterTotalCredits += course.credits;
+        }
+      });
 
-          // Add to cumulative totals
-          cumulativePoints += coursePoints;
+      // For cumulative GPA, we need to track all courses seen so far
+      // and apply the repeated course filtering on the cumulative list
+      cumulativeCourses = [...cumulativeCourses, ...semesterCourses];
+      const uniqueCumulativeCourses = filterRepeatedCourses(cumulativeCourses);
+
+      // Recalculate cumulative points and credits from the filtered list
+      cumulativePoints = 0;
+      cumulativeCredits = 0;
+
+      uniqueCumulativeCourses.forEach((course) => {
+        if (course.grade && gradeMap[course.grade] !== undefined) {
+          cumulativePoints += gradeMap[course.grade] * course.credits;
           cumulativeCredits += course.credits;
         }
       });

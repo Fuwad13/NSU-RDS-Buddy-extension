@@ -4,25 +4,58 @@
 <head>
   <meta charset="UTF-8" />
   <link rel="stylesheet" href="styles/style.css" />
-  <title>CGPA What‑If</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" />
+  <title>NSU RDS Buddy</title>
 </head>
 <body>
-  <div id="popup-root">
-    <h4>NSU RDS Buddy</h4>
-    <div class="extension-info">
-      <p><strong>Version:</strong> 0.1.0</p>
-      <p><strong>Description:</strong> A Chrome extension to calculate what-if grades and cgpa for NSUers</p>
-      <p><strong>Author:</strong> Fuwad Hasan</p>
-      <p><strong>Source code:</strong> <a href="https://github.com/Fuwad13/NSU-RDS-Buddy-extension" target="_blank">Github</a></p>
-      <p>This extension provides enhanced functionalities for NSU RDS including:</p>
-      <ul>
-        <li>CGPA What-If Calculator</li>
-        <li>Visualization of grades & cgpa over time</li>
-      </ul>
+  <div id="popup-root">    <div class="header">
+      <img src="icons/gpa64.png" alt="NSU RDS Buddy" class="app-icon">
+      <h4>NSU RDS Buddy</h4>
+    </div>      <div class="extension-info">
+        <div class="extension-description">
+        <p>Enhanced tools for NSU students to track, predict and visualize their academic performance directly in RDS.</p>
+      </div>
+      
+      <h5 class="section-header"><i class="fas fa-star"></i> Features</h5>
+      <div class="features">
+        <div class="feature-item">
+          <i class="fas fa-calculator"></i> CGPA What-If Calculator
+        </div>
+        <div class="feature-item">
+          <i class="fas fa-chart-line"></i> CGPA Progress Graph
+        </div>
+      </div>      <h5 class="section-header"><i class="fas fa-question-circle"></i> How to use</h5>
+      <div class="usage-container">
+        <p class="usage-text">Go to <a href="https://rds3.northsouth.edu/students/grade_history" target="_blank" class="page-link">grade history page</a> in RDS and scroll down to check the extension's functionality</p>
+        <a href="https://rds3.northsouth.edu/students/grade_history" target="_blank" class="page-link-btn"><i class="fas fa-external-link-alt"></i></a>      </div>
+        <h5 class="section-header"><i class="fas fa-info-circle"></i> About</h5>
+      <div class="about-info-container">
+        <div class="about-item">
+          <i class="fas fa-code-branch"></i> Version: <strong>&nbsp; v0.1.0</strong>
+        </div>
+        <div class="about-item">
+          <i class="fab fa-github"></i> <a href="https://github.com/Fuwad13/NSU-RDS-Buddy-extension" target="_blank">Source Code</a>
+        </div>
+      </div>
+      
+      <div class="thank-you-message">
+        <p>Thank you for using this extension!<br>Please <a href="https://github.com/Fuwad13/NSU-RDS-Buddy-extension" target="_blank">star the repository</a> if you liked it.</p>
+      </div>
+      
+        <h5 class="section-header"><i class="fas fa-user"></i> Author Info</h5>
+      <div class="author-info">
+        <div class="author-container">
+          <span class="author-name">Fuwad Hasan</span>          <div class="author-links">
+            <a href="mailto:fuwad.hasan221b@gmail.com" class="author-link-btn" title="Email"><i class="fas fa-envelope"></i></a>
+            <a href="https://www.linkedin.com/in/fuwad-hasan/" target="_blank" class="author-link-btn" title="LinkedIn"><i class="fab fa-linkedin"></i></a>
+            <a href="https://github.com/Fuwad13" target="_blank" class="author-link-btn" title="GitHub"><i class="fab fa-github"></i></a>
+          </div>
+        </div>
+      </div>
     </div>
-    <h4>How to use:</h4>
-    <p>Please go to your grade history page in RDS and scroll to the bottom to see the extension's functionalities</p>
-    
+      <div class="footer">
+      © Fuwad Hasan
+    </div>
   </div>
   <script src="popup.js"></script>
 </body>

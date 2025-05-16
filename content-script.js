@@ -1,48 +1,17 @@
+// Import functionality from our modules
+// Note: In a Chrome extension using manifest v3, ES modules aren't directly supported in content scripts
+// We've included module files in manifest.json to ensure they're loaded before this file
+
 (() => {
+  // Get tables from the document
   const tables = document.querySelectorAll(".hist-grades table");
   const [waiverTable, transferTable, semesterTable] = tables;
 
-  function parseTable(table, mapRowFn) {
-    return Array.from(table.querySelectorAll("tbody tr"))
-      .filter((row) => !row.classList.contains("divider-td"))
-      .map(mapRowFn);
-  }
-
-  const waiverCourses = parseTable(waiverTable, (row) => {
-    const [codeTd, creditTd, titleTd, gradeTd] = row.querySelectorAll("td");
-    return {
-      code: codeTd.textContent.trim(),
-      credits: parseFloat(creditTd.textContent),
-      title: titleTd.textContent.trim(),
-      grade: gradeTd.textContent.trim() || null,
-    };
-  });
-
-  const transferCourses = parseTable(transferTable, (row) => {
-    const [codeTd, creditTd, titleTd] = row.querySelectorAll("td");
-    return {
-      code: codeTd.textContent.trim(),
-      credits: parseFloat(creditTd.textContent),
-      title: titleTd.textContent.trim(),
-    };
-  });
-
-  let semesterCourses = parseTable(semesterTable, (row) => {
-    const cols = row.querySelectorAll("td");
-    return {
-      semester: cols[0].textContent.trim() || null,
-      year: cols[1].textContent.trim() || null,
-      code: cols[2].textContent.trim(),
-      section: cols[3].textContent.trim(),
-      facultyCode: cols[4].textContent.trim(),
-      facultyName: cols[5].textContent.trim(),
-      credits: parseFloat(cols[6].textContent),
-      title: cols[7].textContent.trim(),
-      grade: cols[8].textContent.trim() || null,
-      crCount: parseFloat(cols[9].textContent),
-      crPassed: parseFloat(cols[10].textContent),
-    };
-  });
+  // Parse course data using functions from parser.js
+  // These functions are globally available as they're loaded before this script
+  const waiverCourses = parseWaiverCourses(waiverTable);
+  const transferCourses = parseTransferCourses(transferTable);
+  let semesterCourses = parseSemesterCourses(semesterTable);
 
   let targetElement = document.querySelector(".hist-grades");
 
@@ -248,7 +217,6 @@
         }
       });
 
-      // Log the repeated courses and their best grades
       Object.keys(courseCounts).forEach((code) => {
         if (courseCounts[code] > 1) {
           const instances = original.filter((c) => c.code === code);
@@ -270,7 +238,6 @@
     }
   }
 
-  // Update the filterRepeatedCourses function to include logging
   function filterRepeatedCourses(courses) {
     const courseMap = new Map();
 

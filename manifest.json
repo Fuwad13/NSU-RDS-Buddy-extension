@@ -2,18 +2,27 @@
   "manifest_version": 3,
   "name": "NSU RDS Buddy",
   "version": "0.1.0",
-  "description": "A Chrome extension to calculate what-if grades and cgpa for NSUers",
+  "description": "Calculate what-if CGPA and visulaize your academic progression.",
   "icons": {
     "16": "icons/gpa16.png",
     "48": "icons/gpa64.png",
     "128": "icons/gpa128.png"
   },
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": ["storage"],
   "host_permissions": ["https://rds3.northsouth.edu/students/grade_history/*"],
   "content_scripts": [
     {
       "matches": ["https://rds3.northsouth.edu/students/grade_history/*"],
-      "js": ["libs/chart.umd.js", "content-script.js"],
+      "js": [
+        "libs/chart.umd.js",
+        "js/modules/parser.js",
+        "js/modules/calculator.js",
+        "js/modules/renderer.js",
+        "js/modules/chart.js",
+        "js/modules/storage.js",
+        "js/modules/ui.js",
+        "js/modules/content-script.js"
+      ],
       "run_at": "document_idle"
     }
   ],

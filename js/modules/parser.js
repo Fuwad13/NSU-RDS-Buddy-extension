@@ -1,7 +1,3 @@
-// Parser module for NSU RDS Buddy
-// Responsible for parsing HTML tables and extracting course data
-
-// Make functions available globally for Chrome extension
 window.parseTable = function (table, mapRowFn) {
   return Array.from(table.querySelectorAll("tbody tr"))
     .filter((row) => !row.classList.contains("divider-td"))

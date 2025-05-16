@@ -1,7 +1,3 @@
-// Main content script for NSU RDS Buddy
-// This file is the entry point for the Chrome extension
-// It integrates functionality from modularized code
-
 (() => {
   // Get tables from the document
   const tables = document.querySelectorAll(".hist-grades table");

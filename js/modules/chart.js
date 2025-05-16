@@ -1,7 +1,3 @@
-// Chart module for NSU RDS Buddy
-// Responsible for chart-related functionality
-
-// Initialize Chart.js if available
 window.initializeCharts = function () {
   if (!window.Chart) {
     console.warn("Chart.js is not available");

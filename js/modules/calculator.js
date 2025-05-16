@@ -1,7 +1,3 @@
-// Calculator module for NSU RDS Buddy
-// Responsible for CGPA calculation logic and grade calculations
-
-// GPA Points mapping
 window.GPAPoints = {
   A: 4.0,
   "A-": 3.7,

@@ -1,7 +1,3 @@
-// Storage module for NSU RDS Buddy
-// Responsible for handling data storage
-
-// Save data to chrome.storage.local
 window.saveData = function (key, value) {
   return new Promise((resolve, reject) => {
     if (!chrome || !chrome.storage) {

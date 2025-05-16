@@ -1,7 +1,3 @@
-// UI module for NSU RDS Buddy
-// Responsible for UI event handlers & interactions
-
-// Initialize event listeners
 window.initEventListeners = function (container, courses, waiverCourses) {
   initTabSwitching(container);
   initSortableTables(container);

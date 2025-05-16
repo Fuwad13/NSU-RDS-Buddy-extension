@@ -1,7 +1,3 @@
-// Renderer module for NSU RDS Buddy
-// Responsible for UI rendering functions
-
-// Create a container for the extension UI
 window.createContainer = function () {
   const container = document.createElement("div");
   container.id = "nsuBuddy";

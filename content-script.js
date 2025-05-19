@@ -568,9 +568,22 @@
           return;
         }
 
+        // Validate course code format: only Latin letters and digits
+        const courseCodeRegex = /^[A-Za-z0-9]+$/;
+        if (!courseCodeRegex.test(codeInput.value)) {
+          document.getElementById("course-validation-error").textContent =
+            "Course code should only contain Latin letters and digits.";
+          document.getElementById("course-validation-error").style.display =
+            "block";
+          return;
+        }
+
+        // Convert course code to uppercase for Latin letters
+        const formattedCourseCode = codeInput.value.toUpperCase();
+
         // Add the new course
         semesterCourses.push({
-          code: codeInput.value,
+          code: formattedCourseCode,
           title: titleInput.value,
           credits: parseFloat(creditsInput.value),
           grade: gradeInput.value,
@@ -579,13 +592,13 @@
         // Hide modal and update view
         document.getElementById("add-course-modal").style.display = "none";
         renderInputs(semesterCourses);
-        update();
-
-        // Reset form for next use
+        update(); // Reset form for next use
         codeInput.value = "";
         titleInput.value = "";
         creditsInput.value = "3";
         gradeInput.value = "";
+        document.getElementById("course-validation-error").textContent =
+          "Please fill in all required fields.";
         document.getElementById("course-validation-error").style.display =
           "none";
       });
@@ -877,7 +890,12 @@
       const semesterBestGrades = {};
 
       semesterCourses.forEach((course) => {
-        if (course.grade && gradeMap[course.grade] !== undefined && gradeMap[course.grade] !== null && course.credits > 0) {
+        if (
+          course.grade &&
+          gradeMap[course.grade] !== undefined &&
+          gradeMap[course.grade] !== null &&
+          course.credits > 0
+        ) {
           const coursePoints = gradeMap[course.grade] * course.credits;
 
           // Add to semester totals - for semester GPA, count all courses

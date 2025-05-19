@@ -93,7 +93,7 @@
                   <p>What-If CGPA: <span id="whatif-result" style="font-weight: bold; color: #4285f4; font-size: 1.2em;">—</span></p>
                   <hr>
                   <p><small>Make changes to the grades of existing courses or add new courses to see how they affect your CGPA.</small></p>
-                  <p><small>In real cases, you can't retake any courses that have grade B+ or above. I, W grades doesn't contribute to your cgpa calculation</small></p>
+                  <p><small>In real cases, you can't retake any courses that have grade B+ or above. I, W grades doesn't contribute to your cgpa calculation.</small></p>
                 </div>
               </div>
             </div>

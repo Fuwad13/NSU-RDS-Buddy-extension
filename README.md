@@ -1,6 +1,6 @@
 # NSU-RDS-Buddy-extension
 
-A Chrome extension that enhances the North South University (NSU) Results & Data Services (RDS) portal with additional features to help students manage their academic records, analyze performance trends, and plan for future semesters.
+A Chrome extension that enhances the North South University (NSU) RDS portal with additional features to help students manage their academic records, analyze performance trends, and plan for future semesters.
 
 ![NSU RDS Buddy Extension](icons/gpa128.png)
 

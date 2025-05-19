@@ -8,7 +8,7 @@
     "48": "icons/gpa64.png",
     "128": "icons/gpa128.png"
   },
-  "permissions": ["storage"],
+  "permissions": [],
   "host_permissions": ["https://rds3.northsouth.edu/students/grade_history/*"],
   "content_scripts": [
     {
@@ -23,11 +23,5 @@
       "16": "icons/gpa16.png",
       "48": "icons/gpa64.png"
     }
-  },
-  "web_accessible_resources": [
-    {
-      "resources": ["libs/*"],
-      "matches": ["https://rds3.northsouth.edu/*"]
-    }
-  ]
+  }
 }

@@ -462,25 +462,12 @@
     const resultElement = document.getElementById("whatif-result");
     resultElement.innerHTML = currentCGPAValue;
   });
-
   document.getElementById("add-course").addEventListener("click", () => {
     document.getElementById("add-course-modal").style.display = "flex";
   });
 
-  // load saved scenario on init
-  chrome.storage.local.get("whatIfData", ({ whatIfData }) => {
-    if (whatIfData) {
-      // merge saved grades back into semesterCourses
-      whatIfData.forEach((c, i) => {
-        if (semesterCourses[i]) {
-          semesterCourses[i].grade = c.grade;
-          semesterCourses[i].credits = c.credits;
-        }
-      });
-      renderInputs(semesterCourses);
-      update();
-    }
-  });
+  // Storage functionality removed (no longer using storage permission)
+  // Previously loaded saved scenario on init
 
   // Add course modal HTML to the page
   function createAddCourseModal() {

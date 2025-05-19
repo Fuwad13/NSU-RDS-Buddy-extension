@@ -229,27 +229,86 @@
   };
 
   const originalCourses = JSON.parse(JSON.stringify(semesterCourses));
-
   function calcCurrentCgpa() {
     const validCourses = originalCourses.filter(
-      (c) => c.grade && gradeMap[c.grade] !== undefined
+      (c) =>
+        c.grade &&
+        gradeMap[c.grade] !== undefined &&
+        gradeMap[c.grade] !== null &&
+        c.credits > 0
     );
-    const totalPoints = validCourses.reduce(
+
+    // Group courses by their code to handle retakes
+    const coursesByCode = {};
+    validCourses.forEach((course) => {
+      const code = course.code;
+      if (!coursesByCode[code]) {
+        coursesByCode[code] = [];
+      }
+      coursesByCode[code].push(course);
+    });
+
+    // For each course code, only keep the course with the best grade
+    const bestGradeCourses = [];
+    Object.values(coursesByCode).forEach((courses) => {
+      // Sort by grade points in descending order
+      courses.sort(
+        (a, b) => (gradeMap[b.grade] || 0) - (gradeMap[a.grade] || 0)
+      );
+      // Add the course with the best grade to our final list
+      bestGradeCourses.push(courses[0]);
+    });
+
+    const totalPoints = bestGradeCourses.reduce(
       (sum, c) => sum + (gradeMap[c.grade] || 0) * c.credits,
       0
     );
-    const totalCredits = validCourses.reduce((sum, c) => sum + c.credits, 0);
+    const totalCredits = bestGradeCourses.reduce(
+      (sum, c) => sum + c.credits,
+      0
+    );
     return totalCredits ? (totalPoints / totalCredits).toFixed(2) : "—";
   }
 
   const currentCGPAValue = calcCurrentCgpa();
-
   function calcWhatIfCgpa(courses) {
-    const totalPoints = courses.reduce(
+    // Filter courses with valid grades
+    const validCourses = courses.filter(
+      (c) =>
+        c.grade &&
+        gradeMap[c.grade] !== undefined &&
+        gradeMap[c.grade] !== null &&
+        c.credits > 0
+    );
+    // Group courses by their code to handle retakes
+    const coursesByCode = {};
+    validCourses.forEach((course) => {
+      const code = course.code;
+      if (!coursesByCode[code]) {
+        coursesByCode[code] = [];
+      }
+      coursesByCode[code].push(course);
+    });
+
+    // For each course code, only keep the course with the best grade
+    const bestGradeCourses = [];
+    Object.values(coursesByCode).forEach((courses) => {
+      // Sort by grade points in descending order
+      courses.sort(
+        (a, b) => (gradeMap[b.grade] || 0) - (gradeMap[a.grade] || 0)
+      );
+      // Add the course with the best grade to our final list
+      bestGradeCourses.push(courses[0]);
+    });
+
+    const totalPoints = bestGradeCourses.reduce(
       (sum, c) => sum + (gradeMap[c.grade] || 0) * c.credits,
       0
     );
-    const totalCredits = courses.reduce((sum, c) => sum + c.credits, 0);
+    const totalCredits = bestGradeCourses.reduce(
+      (sum, c) => sum + c.credits,
+      0
+    );
     return totalCredits ? (totalPoints / totalCredits).toFixed(2) : "—";
   }
 
@@ -797,12 +856,13 @@
     const totalCredits = [];
     const courseCounts = [];
     const semesterCredits = [];
-    const semesterGPAs = []; // New array to store individual semester GPAs
-
-    // Track cumulative data for CGPA calculation
+    const semesterGPAs = []; // New array to store individual semester GPAs    // Track cumulative data for CGPA calculation
     let cumulativeCourses = [];
     let cumulativePoints = 0;
     let cumulativeCredits = 0;
+
+    // For tracking best grades of each course
+    let bestGradesByCourseCode = {};
 
     // Process semesters in the order they appear in the transcript
     semesterOrder.forEach((semesterKey) => {
@@ -812,21 +872,46 @@
       let semesterTotalCredits = 0;
       let semesterTotalPoints = 0;
 
+      // For each semester, track the best grade for each course code
+      const semesterBestGrades = {};
+
       semesterCourses.forEach((course) => {
         if (course.grade && gradeMap[course.grade] !== undefined) {
           const coursePoints = gradeMap[course.grade] * course.credits;
 
-          // Add to semester totals
+          // Add to semester totals - for semester GPA, count all courses
           semesterTotalPoints += coursePoints;
           semesterTotalCredits += course.credits;
 
-          // Add to cumulative totals
-          cumulativePoints += coursePoints;
-          cumulativeCredits += course.credits;
+          // Track best grade for each course code in this semester
+          const code = course.code;
+          if (
+            !semesterBestGrades[code] ||
+            gradeMap[course.grade] > gradeMap[semesterBestGrades[code].grade]
+          ) {
+            semesterBestGrades[code] = course;
+          }
+
+          // Track best grade for each course code across all semesters
+          if (
+            !bestGradesByCourseCode[code] ||
+            gradeMap[course.grade] >
+              gradeMap[bestGradesByCourseCode[code].grade]
+          ) {
+            bestGradesByCourseCode[code] = course;
+          }
         }
       });
 
-      // Calculate semester GPA and cumulative GPA
+      // Calculate cumulative GPA using only best grades for each course code
+      cumulativePoints = 0;
+      cumulativeCredits = 0;
+      Object.values(bestGradesByCourseCode).forEach((course) => {
+        cumulativePoints += gradeMap[course.grade] * course.credits;
+        cumulativeCredits += course.credits;
+      });
+
+      // Calculate semester GPA (includes all courses in the semester)
       const semesterGPA =
         semesterTotalCredits > 0
           ? semesterTotalPoints / semesterTotalCredits

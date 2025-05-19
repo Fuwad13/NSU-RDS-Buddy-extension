@@ -876,7 +876,7 @@
       const semesterBestGrades = {};
 
       semesterCourses.forEach((course) => {
-        if (course.grade && gradeMap[course.grade] !== undefined) {
+        if (course.grade && gradeMap[course.grade] !== undefined && gradeMap[course.grade] !== null && course.credits > 0) {
           const coursePoints = gradeMap[course.grade] * course.credits;
 
           // Add to semester totals - for semester GPA, count all courses

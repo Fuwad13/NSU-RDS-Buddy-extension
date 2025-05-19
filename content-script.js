@@ -212,7 +212,6 @@
       document.body.appendChild(chartContainer);
     }
   }
-
   const gradeMap = {
     A: 4.0,
     "A-": 3.7,
@@ -225,6 +224,8 @@
     "D+": 1.3,
     D: 1.0,
     F: 0.0,
+    W: null, // Withdrawal, not counted in CGPA
+    I: null, // Incomplete, not counted in CGPA
   };
 
   const originalCourses = JSON.parse(JSON.stringify(semesterCourses));
@@ -282,7 +283,6 @@
       const isGradeChanged = originalCourse && originalCourse.grade !== c.grade;
 
       if (isGradeChanged) {
-        console.log("Test debug");
         row.style.backgroundColor = "#fff3cd"; // Light yellow background
         row.style.borderLeft = "3px solid #ffc107"; // Yellow border
       }
@@ -393,9 +393,6 @@
 
   // Reset button functionality
   document.getElementById("reset-grades").addEventListener("click", () => {
-    // Reset semesterCourses to the original state
-    console.log("Resetting to original courses");
-    console.log(originalCourses);
     semesterCourses = JSON.parse(JSON.stringify(originalCourses));
     renderInputs(semesterCourses);
     // Use the cached CGPA value for consistency
@@ -770,7 +767,6 @@
         if (!course.year) course.year = prevCourse.year;
       }
     });
-    console.log(coursesCopy);
 
     // Group courses by semester and year while preserving original order
     const semesterGroups = {};

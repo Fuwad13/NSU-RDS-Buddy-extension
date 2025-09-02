@@ -48,10 +48,10 @@
   function getSemesterOrder(semesterName) {
     if (!semesterName) return 5;
     const lowerSemester = semesterName.toLowerCase();
-    if (lowerSemester.includes('spring')) return 1;
-    if (lowerSemester.includes('summer')) return 2;
-    if (lowerSemester.includes('fall')) return 3;
-    if (lowerSemester.includes('intersession')) return 4;
+    if (lowerSemester.includes("spring")) return 1;
+    if (lowerSemester.includes("summer")) return 2;
+    if (lowerSemester.includes("fall")) return 3;
+    if (lowerSemester.includes("intersession")) return 4;
     return 5; // For any unknown semester types
   }
 
@@ -74,7 +74,7 @@
     if (yearDiff !== 0) {
       return yearDiff;
     }
-    
+
     // Same year, sort by semester order
     return getSemesterOrder(a.semester) - getSemesterOrder(b.semester);
   });
@@ -371,7 +371,7 @@
 
     const tbody = document.getElementById("course-inputs");
     let lastSemesterYear = null;
-    
+
     courses.forEach((c, i) => {
       const row = document.createElement("tr");
 
@@ -386,22 +386,25 @@
       }
 
       // Show semester info only for the first course in each semester or for new courses
-      const currentSemesterYear = c.semester && c.year ? `${c.semester} ${c.year}` : "";
-      const showSemesterInfo = currentSemesterYear && currentSemesterYear !== lastSemesterYear;
-      
+      const currentSemesterYear =
+        c.semester && c.year ? `${c.semester} ${c.year}` : "";
+      const showSemesterInfo =
+        currentSemesterYear && currentSemesterYear !== lastSemesterYear;
+
       // Add a subtle divider between different semesters
       if (showSemesterInfo && lastSemesterYear !== null) {
         const dividerRow = document.createElement("tr");
         dividerRow.style.height = "5px";
         dividerRow.style.backgroundColor = "#f8f9fa";
-        dividerRow.innerHTML = '<td colspan="6" style="padding: 2px; border-top: 2px solid #e9ecef;"></td>';
+        dividerRow.innerHTML =
+          '<td colspan="6" style="padding: 2px; border-top: 2px solid #e9ecef;"></td>';
         tbody.appendChild(dividerRow);
       }
 
       row.innerHTML = `
-        <td style="font-size: 12px; color: #666; ${showSemesterInfo ? 'font-weight: bold;' : ''}">${
-          showSemesterInfo ? currentSemesterYear : ''
-        }</td>
+        <td style="font-size: 12px; color: #666; ${
+          showSemesterInfo ? "font-weight: bold;" : ""
+        }">${showSemesterInfo ? currentSemesterYear : ""}</td>
         <td>${c.code || "New Course"}</td>
         <td>${c.title || "New Course Title"}</td>
         <td>
@@ -445,7 +448,7 @@
         </td>
       `;
       tbody.appendChild(row);
-      
+
       if (showSemesterInfo) {
         lastSemesterYear = currentSemesterYear;
       }
@@ -911,24 +914,24 @@
     // Sort semesters chronologically
     function getSemesterOrder(semesterName) {
       const lowerSemester = semesterName.toLowerCase();
-      if (lowerSemester.includes('spring')) return 1;
-      if (lowerSemester.includes('summer')) return 2;
-      if (lowerSemester.includes('fall')) return 3;
-      if (lowerSemester.includes('intersession')) return 4;
+      if (lowerSemester.includes("spring")) return 1;
+      if (lowerSemester.includes("summer")) return 2;
+      if (lowerSemester.includes("fall")) return 3;
+      if (lowerSemester.includes("intersession")) return 4;
       return 5; // For any unknown semester types
     }
 
     const semesterOrder = Array.from(semesterKeys)
-      .filter(key => key !== "Unknown")
+      .filter((key) => key !== "Unknown")
       .sort((a, b) => {
-        const [semesterA, yearA] = a.split(' ');
-        const [semesterB, yearB] = b.split(' ');
-        
+        const [semesterA, yearA] = a.split(" ");
+        const [semesterB, yearB] = b.split(" ");
+
         const yearDiff = parseInt(yearA) - parseInt(yearB);
         if (yearDiff !== 0) {
           return yearDiff;
         }
-        
+
         // Same year, sort by semester order
         return getSemesterOrder(semesterA) - getSemesterOrder(semesterB);
       });

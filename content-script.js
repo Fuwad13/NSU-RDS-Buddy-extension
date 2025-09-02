@@ -828,9 +828,9 @@
       }
     });
 
-    // Group courses by semester and year while preserving original order
+    // Group courses by semester and year
     const semesterGroups = {};
-    const semesterOrder = [];
+    const semesterKeys = new Set();
 
     coursesCopy.forEach((course) => {
       if (!course.grade || !gradeMap[course.grade]) {
@@ -844,12 +844,41 @@
 
       if (!semesterGroups[key]) {
         semesterGroups[key] = [];
-        // Add to order list only once when we first see this semester
-        semesterOrder.push(key);
       }
 
       semesterGroups[key].push(course);
+      semesterKeys.add(key);
     });
+
+    // Sort semesters chronologically
+    function getSemesterOrder(semesterName) {
+      const lowerSemester = semesterName.toLowerCase();
+      if (lowerSemester.includes('spring')) return 1;
+      if (lowerSemester.includes('summer')) return 2;
+      if (lowerSemester.includes('fall')) return 3;
+      if (lowerSemester.includes('intersession')) return 4;
+      return 5; // For any unknown semester types
+    }
+
+    const semesterOrder = Array.from(semesterKeys)
+      .filter(key => key !== "Unknown")
+      .sort((a, b) => {
+        const [semesterA, yearA] = a.split(' ');
+        const [semesterB, yearB] = b.split(' ');
+        
+        const yearDiff = parseInt(yearA) - parseInt(yearB);
+        if (yearDiff !== 0) {
+          return yearDiff;
+        }
+        
+        // Same year, sort by semester order
+        return getSemesterOrder(semesterA) - getSemesterOrder(semesterB);
+      });
+
+    // Add "Unknown" at the end if it exists
+    if (semesterKeys.has("Unknown")) {
+      semesterOrder.push("Unknown");
+    }
 
     // Arrays for chart data
     const semesters = [];

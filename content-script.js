@@ -1,15 +1,51 @@
 (() => {
-  const tables = document.querySelectorAll(".hist-grades table");
-  const [waiverTable, transferTable, semesterTable] = tables;
+  const tables = Array.from(document.querySelectorAll(".hist-grades table"));
+
+  function countRowsWithMinCols(table, minCols) {
+    if (!table) return 0;
+    return Array.from(table.querySelectorAll("tbody tr")).filter(
+      (row) => row.querySelectorAll("td").length >= minCols
+    ).length;
+  }
+
+  // Pick the most likely semester table by finding the table with
+  // the highest number of "full" course rows (11 columns in NSU RDS layout).
+  let semesterTable = null;
+  let bestSemesterScore = -1;
+  tables.forEach((table) => {
+    const score = countRowsWithMinCols(table, 11);
+    if (score > bestSemesterScore) {
+      bestSemesterScore = score;
+      semesterTable = table;
+    }
+  });
+
+  const nonSemesterTables = tables.filter((table) => table !== semesterTable);
+  const [waiverTable, transferTable] = nonSemesterTables;
 
   function parseTable(table, mapRowFn) {
+    if (!table) return [];
     return Array.from(table.querySelectorAll("tbody tr"))
-      .filter((row) => !row.classList.contains("divider-td"))
-      .map(mapRowFn);
+      .filter(
+        (row) =>
+          !row.classList.contains("divider-td") &&
+          !row.classList.contains("summary-row")
+      )
+      .map((row) => {
+        try {
+          return mapRowFn(row);
+        } catch (error) {
+          console.warn("Skipping malformed table row:", error, row);
+          return null;
+        }
+      })
+      .filter((item) => item !== null);
   }
 
   const waiverCourses = parseTable(waiverTable, (row) => {
-    const [codeTd, creditTd, titleTd, gradeTd] = row.querySelectorAll("td");
+    const cols = row.querySelectorAll("td");
+    if (cols.length < 4) return null;
+    const [codeTd, creditTd, titleTd, gradeTd] = cols;
     return {
       code: codeTd.textContent.trim(),
       credits: parseFloat(creditTd.textContent),
@@ -19,7 +55,9 @@
   });
 
   const transferCourses = parseTable(transferTable, (row) => {
-    const [codeTd, creditTd, titleTd] = row.querySelectorAll("td");
+    const cols = row.querySelectorAll("td");
+    if (cols.length < 3) return null;
+    const [codeTd, creditTd, titleTd] = cols;
     return {
       code: codeTd.textContent.trim(),
       credits: parseFloat(creditTd.textContent),
@@ -29,6 +67,7 @@
 
   let semesterCourses = parseTable(semesterTable, (row) => {
     const cols = row.querySelectorAll("td");
+    if (cols.length < 11) return null;
     return {
       semester: cols[0].textContent.trim() || null,
       year: cols[1].textContent.trim() || null,
@@ -894,7 +933,8 @@
     const semesterKeys = new Set();
 
     coursesCopy.forEach((course) => {
-      if (!course.grade || !gradeMap[course.grade]) {
+      const gradePoint = gradeMap[course.grade];
+      if (!course.grade || gradePoint === undefined || gradePoint === null) {
         return; // Skip courses with no grade or invalid grade
       }
 

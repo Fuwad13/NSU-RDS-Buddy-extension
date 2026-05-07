@@ -1,27 +1,54 @@
 (() => {
-  const tables = Array.from(document.querySelectorAll(".hist-grades table"));
+  if (document.getElementById("whatif-panel")) return;
 
-  function countRowsWithMinCols(table, minCols) {
-    if (!table) return 0;
-    return Array.from(table.querySelectorAll("tbody tr")).filter(
-      (row) => row.querySelectorAll("td").length >= minCols
-    ).length;
+  // ===== Constants =====
+  const gradeMap = {
+    A: 4.0, "A-": 3.7,
+    "B+": 3.3, B: 3.0, "B-": 2.7,
+    "C+": 2.3, C: 2.0, "C-": 1.7,
+    "D+": 1.3, D: 1.0,
+    F: 0.0,
+    W: null, // not counted
+    I: null, // not counted
+    X: null, // not counted
+  };
+
+  // ===== Parser (header-based — robust to extra summary tables) =====
+  const root = document.querySelector(".hist-grades");
+  if (!root) {
+    console.warn("[NSU RDS Buddy] .hist-grades container not found.");
+    return;
+  }
+  const allTables = Array.from(root.querySelectorAll("table"));
+
+  function getHeaders(table) {
+    if (!table) return [];
+    return Array.from(table.querySelectorAll("thead th")).map((th) =>
+      th.textContent.trim().toLowerCase()
+    );
+  }
+  function findTable(predicate) {
+    return allTables.find(predicate);
   }
 
-  // Pick the most likely semester table by finding the table with
-  // the highest number of "full" course rows (11 columns in NSU RDS layout).
-  let semesterTable = null;
-  let bestSemesterScore = -1;
-  tables.forEach((table) => {
-    const score = countRowsWithMinCols(table, 11);
-    if (score > bestSemesterScore) {
-      bestSemesterScore = score;
-      semesterTable = table;
-    }
+  const summaryTable = findTable((t) => {
+    const h = getHeaders(t);
+    return h.includes("student name") && h.includes("cgpa");
   });
-
-  const nonSemesterTables = tables.filter((table) => table !== semesterTable);
-  const [waiverTable, transferTable] = nonSemesterTables;
+  const semesterTable = findTable((t) => {
+    const h = getHeaders(t);
+    return h.includes("semester name") && h.includes("course code") && h.some((x) => x.includes("cr.count"));
+  });
+  const waiverTable = findTable((t) => {
+    if (t === summaryTable || t === semesterTable) return false;
+    const h = getHeaders(t);
+    return h.includes("course code") && h.includes("course grade") && h.length === 4;
+  });
+  const transferTable = findTable((t) => {
+    if (t === summaryTable || t === semesterTable || t === waiverTable) return false;
+    const h = getHeaders(t);
+    return h.includes("course code") && h.includes("course title") && h.length === 3;
+  });
 
   function parseTable(table, mapRowFn) {
     if (!table) return [];
@@ -45,23 +72,21 @@
   const waiverCourses = parseTable(waiverTable, (row) => {
     const cols = row.querySelectorAll("td");
     if (cols.length < 4) return null;
-    const [codeTd, creditTd, titleTd, gradeTd] = cols;
     return {
-      code: codeTd.textContent.trim(),
-      credits: parseFloat(creditTd.textContent),
-      title: titleTd.textContent.trim(),
-      grade: gradeTd.textContent.trim() || null,
+      code: cols[0].textContent.trim(),
+      credits: parseFloat(cols[1].textContent),
+      title: cols[2].textContent.trim(),
+      grade: cols[3].textContent.trim() || null,
     };
   });
 
   const transferCourses = parseTable(transferTable, (row) => {
     const cols = row.querySelectorAll("td");
     if (cols.length < 3) return null;
-    const [codeTd, creditTd, titleTd] = cols;
     return {
-      code: codeTd.textContent.trim(),
-      credits: parseFloat(creditTd.textContent),
-      title: titleTd.textContent.trim(),
+      code: cols[0].textContent.trim(),
+      credits: parseFloat(cols[1].textContent),
+      title: cols[2].textContent.trim(),
     };
   });
 
@@ -91,7 +116,7 @@
     if (lowerSemester.includes("summer")) return 2;
     if (lowerSemester.includes("fall")) return 3;
     if (lowerSemester.includes("intersession")) return 4;
-    return 5; // For any unknown semester types
+    return 5;
   }
 
   // Fill missing semester/year data first
@@ -103,26 +128,23 @@
     }
   });
 
-  // Sort courses chronologically
   semesterCourses.sort((a, b) => {
-    // Handle missing data
     if (!a.year || !b.year) return 0;
     if (!a.semester || !b.semester) return 0;
-
     const yearDiff = parseInt(a.year) - parseInt(b.year);
-    if (yearDiff !== 0) {
-      return yearDiff;
-    }
-
-    // Same year, sort by semester order
+    if (yearDiff !== 0) return yearDiff;
     return getSemesterOrder(a.semester) - getSemesterOrder(b.semester);
   });
 
+  if (semesterCourses.length === 0) {
+    console.warn("[NSU RDS Buddy] No semester courses parsed; nothing to render.");
+    return;
+  }
+
+  // ===== UI insertion =====
   let targetElement = document.querySelector(".hist-grades");
 
   if (targetElement) {
-    console.log("Found grade history container, inserting calculator after it");
-
     let mainContainer =
       targetElement.closest(".container-fluid") ||
       targetElement.closest(".container") ||
@@ -159,15 +181,13 @@
                   <p>Wondering how your grades will affect your CGPA? Use this tool to simulate different grades and see how they impact your overall GPA.
                   You can also add new courses with grades to see how much that grade affects your current CGPA</p>
                 </div>
-              </div>
-              <div class="col-md-4">
                 <div class="well">
                   <h4>CGPA Calculation</h4>
                   <p>Current CGPA: <span id="current-cgpa" style="font-weight: bold;">—</span></p>
                   <p>What-If CGPA: <span id="whatif-result" style="font-weight: bold; color: #4285f4; font-size: 1.2em;">—</span></p>
                   <hr>
                   <p><small>Make changes to the grades of existing courses or add new courses to see how they affect your CGPA.</small></p>
-                  <p><small>In real cases, you can't retake any courses that have grade B+ or above. I, W grades doesn't contribute to your cgpa calculation.</small></p>
+                  <p><small>In real cases, you can't retake any courses that have grade B+ or above. I, W, X grades don't contribute to your cgpa calculation.</small></p>
                 </div>
               </div>
             </div>
@@ -177,20 +197,69 @@
 
       calculatorContainer.appendChild(panel);
       mainContainer.appendChild(calculatorContainer);
+      insertChartPanel(calculatorContainer);
     } else {
-      console.error(
-        "Could not find suitable parent container, appending to body"
-      );
       insertAfterOriginalContent();
     }
   } else {
-    console.log(
-      "Grade history container not found, using alternative insertion method"
-    );
     insertAfterOriginalContent();
   }
+
+  function insertChartPanel(afterContainer) {
+    const chartContainer = document.createElement("div");
+    chartContainer.className = "row";
+    chartContainer.style.marginTop = "30px";
+    chartContainer.style.marginBottom = "30px";
+
+    const chartPanel = document.createElement("div");
+    chartPanel.id = "cgpa-chart-panel";
+    chartPanel.className = "col-md-12";
+
+    chartPanel.innerHTML = `
+      <div class="panel panel-primary">
+        <div class="panel-heading" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <h3 class="panel-title">Academic Performance Insights</h3>
+          <div id="chart-mode-toggle" role="group" aria-label="Chart mode" style="display: flex; flex-wrap: wrap; gap: 4px;">
+            <button type="button" class="btn btn-sm btn-default active" data-mode="both">CGPA &amp; Semester GPA</button>
+            <button type="button" class="btn btn-sm btn-default" data-mode="cgpa">CGPA</button>
+            <button type="button" class="btn btn-sm btn-default" data-mode="sgpa">Semester GPA</button>
+            <button type="button" class="btn btn-sm btn-default" data-mode="distribution">Grade Distribution</button>
+            <button type="button" class="btn btn-sm btn-default" data-mode="credits">Credit Load</button>
+            <button type="button" class="btn btn-sm btn-default" data-mode="heatmap">Grade Heatmap</button>
+            <button type="button" class="btn btn-sm btn-default" data-mode="faculty">Faculty Grades</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="row">
+            <div class="col-md-9">
+              <div id="cgpa-chart-outer" style="position: relative; height: 320px; overflow-y: auto;">
+                <div id="cgpa-chart-wrapper" style="position: relative; height: 100%; min-height: 320px;">
+                  <canvas id="cgpa-chart"></canvas>
+                </div>
+              </div>
+              <div id="grade-heatmap" style="display: none; max-height: 420px; overflow-y: auto;"></div>
+            </div>
+            <div class="col-md-3">
+              <div class="well" id="chart-side-panel">
+                <h4>CGPA Trends</h4>
+                <p>This chart shows how your CGPA has progressed over different semesters.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    chartContainer.appendChild(chartPanel);
+
+    if (afterContainer && afterContainer.parentElement) {
+      afterContainer.parentElement.insertBefore(chartContainer, afterContainer.nextSibling);
+    } else {
+      document.body.appendChild(chartContainer);
+    }
+  }
+
   function insertAfterOriginalContent() {
-    console.log("Inserting calculator at the end of the body");
     const calculatorContainer = document.createElement("div");
     calculatorContainer.className = "row";
     calculatorContainer.style.marginTop = "30px";
@@ -234,76 +303,13 @@
     `;
 
     calculatorContainer.appendChild(panel);
-
     document.body.appendChild(calculatorContainer);
-
-    const chartContainer = document.createElement("div");
-    chartContainer.className = "row";
-    chartContainer.style.marginTop = "30px";
-    chartContainer.style.marginBottom = "30px";
-    chartContainer.style.width = "100%";
-    chartContainer.style.maxWidth = "1200px";
-    chartContainer.style.margin = "30px auto";
-
-    const chartPanel = document.createElement("div");
-    chartPanel.id = "cgpa-chart-panel";
-    chartPanel.className = "col-md-12";
-
-    chartPanel.innerHTML = `
-      <div class="panel panel-primary">
-        <div class="panel-heading">
-          <h3 class="panel-title">CGPA Progression Chart</h3>
-        </div>
-        <div class="panel-body">
-          <div class="row">
-            <div class="col-md-9">
-              <canvas id="cgpa-chart" style="width: 100%; height: 300px;"></canvas>
-            </div>
-            <div class="col-md-3">
-              <div class="well">
-                <h4>CGPA Trends</h4>
-                <p>This chart shows how your CGPA has progressed over different semesters.</p>
-                <p><small>Hover over each point to see details.</small></p>
-                <div id="chart-stats" style="margin-top: 15px;">
-                  <p>Highest CGPA: <span id="highest-cgpa" style="font-weight: bold;">—</span></p>
-                  <p>Lowest CGPA: <span id="lowest-cgpa" style="font-weight: bold;">—</span></p>
-                  <p>Average CGPA: <span id="average-cgpa" style="font-weight: bold;">—</span></p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-
-    chartContainer.appendChild(chartPanel);
-
-    if (calculatorContainer.parentElement) {
-      calculatorContainer.parentElement.insertBefore(
-        chartContainer,
-        calculatorContainer.nextSibling
-      );
-    } else {
-      document.body.appendChild(chartContainer);
-    }
+    insertChartPanel(calculatorContainer);
   }
-  const gradeMap = {
-    A: 4.0,
-    "A-": 3.7,
-    "B+": 3.3,
-    B: 3.0,
-    "B-": 2.7,
-    "C+": 2.3,
-    C: 2.0,
-    "C-": 1.7,
-    "D+": 1.3,
-    D: 1.0,
-    F: 0.0,
-    W: null, // Withdrawal, not counted in CGPA
-    I: null, // Incomplete, not counted in CGPA
-  };
 
+  // ===== State =====
   const originalCourses = JSON.parse(JSON.stringify(semesterCourses));
+
   function calcCurrentCgpa() {
     const validCourses = originalCourses.filter(
       (c) =>
@@ -312,42 +318,26 @@
         gradeMap[c.grade] !== null &&
         c.credits > 0
     );
-
-    // Group courses by their code to handle retakes
     const coursesByCode = {};
     validCourses.forEach((course) => {
-      const code = course.code;
-      if (!coursesByCode[code]) {
-        coursesByCode[code] = [];
-      }
-      coursesByCode[code].push(course);
+      if (!coursesByCode[course.code]) coursesByCode[course.code] = [];
+      coursesByCode[course.code].push(course);
     });
-
-    // For each course code, only keep the course with the best grade
     const bestGradeCourses = [];
     Object.values(coursesByCode).forEach((courses) => {
-      // Sort by grade points in descending order
-      courses.sort(
-        (a, b) => (gradeMap[b.grade] || 0) - (gradeMap[a.grade] || 0)
-      );
-      // Add the course with the best grade to our final list
+      courses.sort((a, b) => (gradeMap[b.grade] || 0) - (gradeMap[a.grade] || 0));
       bestGradeCourses.push(courses[0]);
     });
-
     const totalPoints = bestGradeCourses.reduce(
-      (sum, c) => sum + (gradeMap[c.grade] || 0) * c.credits,
-      0
+      (sum, c) => sum + (gradeMap[c.grade] || 0) * c.credits, 0
     );
-    const totalCredits = bestGradeCourses.reduce(
-      (sum, c) => sum + c.credits,
-      0
-    );
+    const totalCredits = bestGradeCourses.reduce((sum, c) => sum + c.credits, 0);
     return totalCredits ? (totalPoints / totalCredits).toFixed(2) : "—";
   }
 
   const currentCGPAValue = calcCurrentCgpa();
+
   function calcWhatIfCgpa(courses) {
-    // Filter courses with valid grades
     const validCourses = courses.filter(
       (c) =>
         c.grade &&
@@ -355,41 +345,26 @@
         gradeMap[c.grade] !== null &&
         c.credits > 0
     );
-    // Group courses by their code to handle retakes
     const coursesByCode = {};
     validCourses.forEach((course) => {
-      const code = course.code;
-      if (!coursesByCode[code]) {
-        coursesByCode[code] = [];
-      }
-      coursesByCode[code].push(course);
+      if (!coursesByCode[course.code]) coursesByCode[course.code] = [];
+      coursesByCode[course.code].push(course);
     });
-
-    // For each course code, only keep the course with the best grade
     const bestGradeCourses = [];
     Object.values(coursesByCode).forEach((courses) => {
-      // Sort by grade points in descending order
-      courses.sort(
-        (a, b) => (gradeMap[b.grade] || 0) - (gradeMap[a.grade] || 0)
-      );
-      // Add the course with the best grade to our final list
+      courses.sort((a, b) => (gradeMap[b.grade] || 0) - (gradeMap[a.grade] || 0));
       bestGradeCourses.push(courses[0]);
     });
-
     const totalPoints = bestGradeCourses.reduce(
-      (sum, c) => sum + (gradeMap[c.grade] || 0) * c.credits,
-      0
+      (sum, c) => sum + (gradeMap[c.grade] || 0) * c.credits, 0
     );
-    const totalCredits = bestGradeCourses.reduce(
-      (sum, c) => sum + c.credits,
-      0
-    );
+    const totalCredits = bestGradeCourses.reduce((sum, c) => sum + c.credits, 0);
     return totalCredits ? (totalPoints / totalCredits).toFixed(2) : "—";
   }
 
   function renderInputs(courses) {
     const container = document.getElementById("course-inputs-container");
-    container.innerHTML = ""; // clear
+    container.innerHTML = "";
 
     const table = document.createElement("table");
     table.className = "table table-striped table-hover";
@@ -415,22 +390,19 @@
       const row = document.createElement("tr");
 
       const isOriginalCourse = originalCourses.some((oc) => oc.code === c.code);
-
       const originalCourse = originalCourses.find((oc) => oc.code === c.code);
       const isGradeChanged = originalCourse && originalCourse.grade !== c.grade;
 
       if (isGradeChanged) {
-        row.style.backgroundColor = "#fff3cd"; // Light yellow background
-        row.style.borderLeft = "3px solid #ffc107"; // Yellow border
+        row.style.backgroundColor = "#fff3cd";
+        row.style.borderLeft = "3px solid #ffc107";
       }
 
-      // Show semester info only for the first course in each semester or for new courses
       const currentSemesterYear =
         c.semester && c.year ? `${c.semester} ${c.year}` : "";
       const showSemesterInfo =
         currentSemesterYear && currentSemesterYear !== lastSemesterYear;
 
-      // Add a subtle divider between different semesters
       if (showSemesterInfo && lastSemesterYear !== null) {
         const dividerRow = document.createElement("tr");
         dividerRow.style.height = "5px";
@@ -447,27 +419,16 @@
         <td>${c.code || "New Course"}</td>
         <td>${c.title || "New Course Title"}</td>
         <td>
-          <input type="number" data-idx="${i}" class="credit-input form-control" 
-                 value="${
-                   c.credits || 0
-                 }" min="0" max="5" step="0.5" style="width: 70px"
+          <input type="number" data-idx="${i}" class="credit-input form-control"
+                 value="${c.credits || 0}" min="0" max="5" step="0.5" style="width: 70px"
                  ${isOriginalCourse ? "disabled" : ""}>
         </td>
         <td>
-          <select data-idx="${i}" data-code="${
-        c.code
-      }" class="grade-select form-control" 
-                  style="width: 70px; ${
-                    isGradeChanged
-                      ? "background-color: #fff3cd; font-weight: bold;"
-                      : ""
-                  }">
+          <select data-idx="${i}" data-code="${c.code}" class="grade-select form-control"
+                  style="width: 70px; ${isGradeChanged ? "background-color: #fff3cd; font-weight: bold;" : ""}">
             <option value="">—</option>
             ${Object.keys(gradeMap)
-              .map(
-                (g) =>
-                  `<option ${c.grade === g ? "selected" : ""}>${g}</option>`
-              )
+              .map((g) => `<option ${c.grade === g ? "selected" : ""}>${g}</option>`)
               .join("")}
           </select>
         </td>
@@ -476,8 +437,8 @@
             ${
               isGradeChanged
                 ? `<button class="reset-grade btn btn-warning btn-sm" data-idx="${i}" data-original-grade="${originalCourse.grade}" title="Reset to original grade">
-                <span class="glyphicon glyphicon-refresh"></span>
-              </button>`
+                    <span class="glyphicon glyphicon-refresh"></span>
+                  </button>`
                 : ""
             }
             <button class="remove-course btn btn-danger btn-sm" data-idx="${i}" title="Remove course">
@@ -493,17 +454,14 @@
       }
     });
 
-    // Display current CGPA using the cached value
     document.getElementById("current-cgpa").innerText = currentCGPAValue;
   }
 
   // initial render
   renderInputs(semesterCourses);
-
-  // Set the initial what-if CGPA to be the same as current CGPA
   document.getElementById("whatif-result").innerText = currentCGPAValue;
 
-  // event delegation
+  // ===== Event handlers =====
   document.getElementById("whatif-panel").addEventListener("change", (e) => {
     if (
       e.target.classList.contains("grade-select") ||
@@ -513,9 +471,7 @@
     }
   });
 
-  // Add event listener for remove course buttons and reset course buttons
   document.getElementById("whatif-panel").addEventListener("click", (e) => {
-    // For remove course buttons
     if (
       e.target.classList.contains("remove-course") ||
       e.target.closest(".remove-course")
@@ -529,7 +485,6 @@
       update();
     }
 
-    // For reset individual course grade buttons
     if (
       e.target.classList.contains("reset-grade") ||
       e.target.closest(".reset-grade")
@@ -539,37 +494,28 @@
         : e.target.closest(".reset-grade");
       const idx = parseInt(button.dataset.idx);
       const originalGrade = button.dataset.originalGrade;
-
-      // Reset the grade in the semesterCourses array
       if (idx >= 0 && idx < semesterCourses.length) {
         semesterCourses[idx].grade = originalGrade;
-
-        // Re-render the inputs and update the calculation
         renderInputs(semesterCourses);
         update();
       }
     }
   });
 
-  // Reset button functionality
   document.getElementById("reset-grades").addEventListener("click", () => {
     semesterCourses = JSON.parse(JSON.stringify(originalCourses));
     renderInputs(semesterCourses);
-    // Use the cached CGPA value for consistency
     document.getElementById("whatif-result").innerText = currentCGPAValue;
     document.getElementById("whatif-result").style.color = "#4285f4";
-    // Remove any delta indicators
     const resultElement = document.getElementById("whatif-result");
     resultElement.innerHTML = currentCGPAValue;
   });
+
   document.getElementById("add-course").addEventListener("click", () => {
-    document.getElementById("add-course-modal").style.display = "flex";
+    openAddCourseModal();
   });
 
-  // Storage functionality removed (no longer using storage permission)
-  // Previously loaded saved scenario on init
-
-  // Add course modal HTML to the page
+  // ===== Add Course Modal =====
   function createAddCourseModal() {
     const modalContainer = document.createElement("div");
     modalContainer.id = "add-course-modal";
@@ -626,77 +572,83 @@
 
     document.body.appendChild(modalContainer);
 
-    // Add event listeners for the modal
-    document
-      .getElementById("cancel-add-course")
-      .addEventListener("click", () => {
-        document.getElementById("add-course-modal").style.display = "none";
+    document.getElementById("cancel-add-course").addEventListener("click", closeAddCourseModal);
+
+    // Click on backdrop closes modal
+    modalContainer.addEventListener("click", (e) => {
+      if (e.target === modalContainer) closeAddCourseModal();
+    });
+
+    // ESC closes modal
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && modalContainer.style.display === "flex") {
+        closeAddCourseModal();
+      }
+    });
+
+    document.getElementById("add-course-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+
+      const codeInput = document.getElementById("new-course-code");
+      const titleInput = document.getElementById("new-course-title");
+      const creditsInput = document.getElementById("new-course-credits");
+      const gradeInput = document.getElementById("new-course-grade");
+      const errorEl = document.getElementById("course-validation-error");
+
+      if (!codeInput.value || !titleInput.value || !creditsInput.value || !gradeInput.value) {
+        errorEl.textContent = "Please fill in all required fields.";
+        errorEl.style.display = "block";
+        return;
+      }
+
+      const courseCodeRegex = /^[A-Za-z0-9]+$/;
+      if (!courseCodeRegex.test(codeInput.value)) {
+        errorEl.textContent = "Course code should only contain letters and digits.";
+        errorEl.style.display = "block";
+        return;
+      }
+
+      const formattedCourseCode = codeInput.value.toUpperCase();
+
+      semesterCourses.push({
+        code: formattedCourseCode,
+        title: titleInput.value,
+        credits: parseFloat(creditsInput.value),
+        grade: gradeInput.value,
       });
 
-    document
-      .getElementById("add-course-form")
-      .addEventListener("submit", (e) => {
-        e.preventDefault();
+      closeAddCourseModal();
+      renderInputs(semesterCourses);
+      update();
 
-        const codeInput = document.getElementById("new-course-code");
-        const titleInput = document.getElementById("new-course-title");
-        const creditsInput = document.getElementById("new-course-credits");
-        const gradeInput = document.getElementById("new-course-grade");
-
-        // Validate inputs
-        if (
-          !codeInput.value ||
-          !titleInput.value ||
-          !creditsInput.value ||
-          !gradeInput.value
-        ) {
-          document.getElementById("course-validation-error").style.display =
-            "block";
-          return;
-        }
-
-        // Validate course code format: only Latin letters and digits
-        const courseCodeRegex = /^[A-Za-z0-9]+$/;
-        if (!courseCodeRegex.test(codeInput.value)) {
-          document.getElementById("course-validation-error").textContent =
-            "Course code should only contain Latin letters and digits.";
-          document.getElementById("course-validation-error").style.display =
-            "block";
-          return;
-        }
-
-        // Convert course code to uppercase for Latin letters
-        const formattedCourseCode = codeInput.value.toUpperCase();
-
-        // Add the new course
-        semesterCourses.push({
-          code: formattedCourseCode,
-          title: titleInput.value,
-          credits: parseFloat(creditsInput.value),
-          grade: gradeInput.value,
-        });
-
-        // Hide modal and update view
-        document.getElementById("add-course-modal").style.display = "none";
-        renderInputs(semesterCourses);
-        update(); // Reset form for next use
-        codeInput.value = "";
-        titleInput.value = "";
-        creditsInput.value = "3";
-        gradeInput.value = "";
-        document.getElementById("course-validation-error").textContent =
-          "Please fill in all required fields.";
-        document.getElementById("course-validation-error").style.display =
-          "none";
-      });
+      // Reset form for next time
+      codeInput.value = "";
+      titleInput.value = "";
+      creditsInput.value = "3";
+      gradeInput.value = "";
+      errorEl.style.display = "none";
+    });
   }
 
-  // Create the modal on page load
+  function openAddCourseModal() {
+    const modal = document.getElementById("add-course-modal");
+    modal.style.display = "flex";
+    setTimeout(() => {
+      const codeInput = document.getElementById("new-course-code");
+      if (codeInput) codeInput.focus();
+    }, 50);
+  }
+
+  function closeAddCourseModal() {
+    document.getElementById("add-course-modal").style.display = "none";
+    const errorEl = document.getElementById("course-validation-error");
+    if (errorEl) errorEl.style.display = "none";
+  }
+
   createAddCourseModal();
 
-  // ——— C.4 Handle updates & storage ———
+  // ===== Update CGPA display =====
   function update() {
-    // gather form state
     const selects = Array.from(
       document.querySelectorAll("#course-inputs .grade-select")
     );
@@ -704,67 +656,47 @@
       document.querySelectorAll("#course-inputs .credit-input")
     );
 
-    // Update the semesterCourses array with current values from the form
-    selects.forEach((select, i) => {
+    selects.forEach((select) => {
       const idx = parseInt(select.dataset.idx);
       const courseCode = select.dataset.code;
       if (idx >= 0 && idx < semesterCourses.length) {
-        // Update the grade in the semesterCourses array
         semesterCourses[idx].grade = select.value;
 
-        // Check if this is an original course with changed grade
-        const originalCourse = originalCourses.find(
-          (oc) => oc.code === courseCode
-        );
+        const originalCourse = originalCourses.find((oc) => oc.code === courseCode);
         const isOriginalCourse = !!originalCourse;
-        const isGradeChanged =
-          isOriginalCourse && originalCourse.grade !== select.value;
+        const isGradeChanged = isOriginalCourse && originalCourse.grade !== select.value;
 
-        // Get the row containing this select
         const row = select.closest("tr");
 
-        // Apply or remove highlighting based on whether grade has changed
         if (isGradeChanged) {
           row.style.backgroundColor = "#fff3cd";
           row.style.borderLeft = "3px solid #ffc107";
           select.style.backgroundColor = "#fff3cd";
           select.style.fontWeight = "bold";
 
-          // Check if reset button exists
           const actionsCell = row.querySelector("td:last-child .btn-group");
           let resetButton = actionsCell.querySelector(".reset-grade");
-
-          // If the button doesn't exist, create it
           if (!resetButton) {
             resetButton = document.createElement("button");
             resetButton.className = "reset-grade btn btn-warning btn-sm";
             resetButton.dataset.idx = idx;
             resetButton.dataset.originalGrade = originalCourse.grade;
             resetButton.title = "Reset to original grade";
-            resetButton.innerHTML =
-              '<span class="glyphicon glyphicon-refresh"></span>';
-
-            // Insert as the first child in the btn-group
+            resetButton.innerHTML = '<span class="glyphicon glyphicon-refresh"></span>';
             actionsCell.insertBefore(resetButton, actionsCell.firstChild);
           }
         } else if (isOriginalCourse) {
-          // Remove highlighting if grade is same as original
           row.style.backgroundColor = "";
           row.style.borderLeft = "";
           select.style.backgroundColor = "";
           select.style.fontWeight = "";
-
-          // Remove the reset button if it exists
           const resetButton = row.querySelector(".reset-grade");
-          if (resetButton) {
-            resetButton.remove();
-          }
+          if (resetButton) resetButton.remove();
         }
       }
     });
 
-    // Update credit values for new courses (original courses have disabled inputs)
-    credits.forEach((input, i) => {
+    credits.forEach((input) => {
       if (!input.disabled) {
         const idx = parseInt(input.dataset.idx);
         if (idx >= 0 && idx < semesterCourses.length) {
@@ -773,7 +705,6 @@
       }
     });
 
-    // Get current values for CGPA calculation
     const current = semesterCourses.map((c) => ({
       credits: c.credits || 0,
       grade: c.grade,
@@ -781,145 +712,137 @@
       title: c.title,
     }));
 
-    // compute & display
     const currentCGPA = parseFloat(currentCGPAValue);
     const whatIfCGPA = parseFloat(calcWhatIfCgpa(current));
     const resultElement = document.getElementById("whatif-result");
 
-    // Color coding based on improvement or decline with delta badge
     if (whatIfCGPA > currentCGPA) {
-      // Green for improvement
       const delta = (whatIfCGPA - currentCGPA).toFixed(2);
       resultElement.style.color = "#28a745";
-      resultElement.innerHTML = `${whatIfCGPA.toFixed(
-        2
-      )} <span class="badge" style="background-color: #28a745; margin-left: 5px;">+${delta}</span>`;
+      resultElement.innerHTML = `${whatIfCGPA.toFixed(2)} <span class="badge" style="background-color: #28a745; margin-left: 5px;">+${delta}</span>`;
     } else if (whatIfCGPA < currentCGPA) {
-      // Red for decline
       const delta = (whatIfCGPA - currentCGPA).toFixed(2);
       resultElement.style.color = "#dc3545";
-      resultElement.innerHTML = `${whatIfCGPA.toFixed(
-        2
-      )} <span class="badge" style="background-color: #dc3545; margin-left: 5px;">${delta}</span>`;
+      resultElement.innerHTML = `${whatIfCGPA.toFixed(2)} <span class="badge" style="background-color: #dc3545; margin-left: 5px;">${delta}</span>`;
     } else {
-      // Original blue for no change
       resultElement.style.color = "#4285f4";
       resultElement.innerHTML = whatIfCGPA.toFixed(2);
     }
-
-    console.log(
-      "Updated CGPA calculation: Current=" +
-        currentCGPA +
-        ", What-If=" +
-        whatIfCGPA
-    );
   }
 
-  // ——— D.1 Semester vs CGPA Chart ———
-  function initializeChart() {
-    // Make sure the chart container exists before proceeding
-    const chartCanvas = document.getElementById("cgpa-chart");
-    if (!chartCanvas) {
-      console.error("Chart canvas element not found during initialization");
-      // Try to create the container if it doesn't exist yet
-      createChartContainerIfNeeded();
-      return;
-    }
+  // ===== Chart =====
+  let chartInstance = null;
+  let chartMode = "both";
+  let chartData = null;
+  let gradeDistData = null;
+  let creditsData = null;
+  let facultyData = null;
 
-    // Calculate CGPA per semester for the chart
-    const semesterData = calculateSemesterCGPA(originalCourses);
+  const GRADE_ORDER = ["A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "F", "W", "I", "X"];
+  const GRADE_COLORS = {
+    A: "#28a745", "A-": "#5cb85c",
+    "B+": "#2780e3", B: "#4a90e2", "B-": "#7fb3e6",
+    "C+": "#f0ad4e", C: "#ec971f", "C-": "#d58512",
+    "D+": "#ff9800", D: "#f57c00",
+    F: "#d9534f",
+    W: "#95a5a6", I: "#7f8c8d", X: "#bdc3c7",
+  };
 
-    if (semesterData.semesters.length === 0) {
-      console.log("No valid semester data available for chart");
-      document.getElementById("cgpa-chart-panel").innerHTML =
-        '<div class="alert alert-warning">No semester data available to display in the chart.</div>';
-      return;
-    }
+  const CHART_TITLES = {
+    both: "CGPA & Semester GPA Progression",
+    cgpa: "CGPA Progression by Semester",
+    sgpa: "Semester GPA Progression",
+    distribution: "Grade Distribution",
+    credits: "Credit Load per Semester",
+    heatmap: "Grade Heatmap",
+    faculty: "Average Grade per Faculty",
+  };
 
-    // Render the chart
-    renderCGPAChart(semesterData);
-
-    // Update statistics
-    updateChartStatistics(semesterData.cgpaValues);
+  function calculateGradeDistribution(courses) {
+    const counts = {};
+    courses.forEach((c) => {
+      if (c.grade && gradeMap[c.grade] !== undefined) {
+        counts[c.grade] = (counts[c.grade] || 0) + 1;
+      }
+    });
+    const grades = [];
+    const data = [];
+    const colors = [];
+    GRADE_ORDER.forEach((g) => {
+      if (counts[g]) {
+        grades.push(g);
+        data.push(counts[g]);
+        colors.push(GRADE_COLORS[g]);
+      }
+    });
+    return { grades, data, colors };
   }
 
-  // Create chart container if it doesn't exist yet
-  function createChartContainerIfNeeded() {
-    // Check if the chart container already exists
-    if (document.getElementById("cgpa-chart")) {
-      return; // Chart container already exists
-    }
+  function fillSemesterYear(courses) {
+    const copy = JSON.parse(JSON.stringify(courses));
+    copy.forEach((c, i) => {
+      if (i > 0) {
+        if (!c.semester) c.semester = copy[i - 1].semester;
+        if (!c.year) c.year = copy[i - 1].year;
+      }
+    });
+    return copy;
+  }
 
-    console.log("Creating chart container");
-    const calculatorContainer = document
-      .querySelector("#whatif-panel")
-      .closest(".row");
+  function sortSemesterKeys(keys) {
+    return keys.slice().sort((a, b) => {
+      const [sa, ya] = a.split(" ");
+      const [sb, yb] = b.split(" ");
+      const yd = parseInt(ya) - parseInt(yb);
+      if (yd !== 0) return yd;
+      return getSemesterOrder(sa) - getSemesterOrder(sb);
+    });
+  }
 
-    if (!calculatorContainer) {
-      console.error("Could not find calculator container to position chart");
-      return;
-    }
+  function calculateCreditsPerSemester(courses) {
+    const filled = fillSemesterYear(courses);
+    const groups = {};
+    filled.forEach((c) => {
+      if (!c.semester || !c.year) return;
+      if (!c.credits || c.credits <= 0) return;
+      const key = `${c.semester} ${c.year}`;
+      groups[key] = (groups[key] || 0) + c.credits;
+    });
+    const semesters = sortSemesterKeys(Object.keys(groups));
+    return {
+      semesters,
+      credits: semesters.map((k) => +groups[k].toFixed(1)),
+    };
+  }
 
-    // Create the chart container
-    const chartContainer = document.createElement("div");
-    chartContainer.className = "row";
-    chartContainer.style.marginTop = "30px";
-    chartContainer.style.marginBottom = "30px";
-    chartContainer.style.width = "100%";
-    chartContainer.style.maxWidth = "1200px";
-    chartContainer.style.margin = "30px auto";
+  function calculateFacultyStats(courses) {
+    const stats = {};
+    courses.forEach((c) => {
+      if (!c.facultyName || !c.facultyName.trim()) return;
+      const gp = gradeMap[c.grade];
+      if (gp === undefined || gp === null) return; // skip W/I/X & missing
+      if (!c.credits || c.credits <= 0) return;
 
-    // Create panel container for chart
-    const chartPanel = document.createElement("div");
-    chartPanel.id = "cgpa-chart-panel";
-    chartPanel.className = "col-md-12";
+      const name = c.facultyName.trim();
+      if (!stats[name]) stats[name] = { totalPoints: 0, totalCredits: 0, count: 0, courses: [] };
+      stats[name].totalPoints += gp * c.credits;
+      stats[name].totalCredits += c.credits;
+      stats[name].count += 1;
+      stats[name].courses.push(`${c.code} (${c.grade})`);
+    });
 
-    // Set panel HTML
-    chartPanel.innerHTML = `
-      <div class="panel panel-primary">
-        <div class="panel-heading">
-          <h3 class="panel-title">CGPA Progression Chart</h3>
-        </div>
-        <div class="panel-body">
-          <div class="row">
-            <div class="col-md-9">
-              <canvas id="cgpa-chart" style="width: 100%; height: 300px;"></canvas>
-            </div>
-            <div class="col-md-3">
-              <div class="well">
-                <h4>CGPA Trends</h4>
-                <p>This chart shows how your CGPA has progressed over different semesters.</p>
-                <p><small>Hover over each point to see details.</small></p>
-                <div id="chart-stats" style="margin-top: 15px;">
-                  <p>Highest CGPA: <span id="highest-cgpa" style="font-weight: bold;">—</span></p>
-                  <p>Lowest CGPA: <span id="lowest-cgpa" style="font-weight: bold;">—</span></p>
-                  <p>Average CGPA: <span id="average-cgpa" style="font-weight: bold;">—</span></p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-
-    chartContainer.appendChild(chartPanel);
-
-    // Insert the chart container after the calculator container
-    const parentElement = calculatorContainer.parentElement;
-    if (parentElement) {
-      parentElement.insertBefore(
-        chartContainer,
-        calculatorContainer.nextSibling
-      );
-    } else {
-      document.body.appendChild(chartContainer);
-    }
+    return Object.entries(stats)
+      .map(([name, s]) => ({
+        name,
+        avg: s.totalCredits > 0 ? +(s.totalPoints / s.totalCredits).toFixed(2) : 0,
+        count: s.count,
+        courses: s.courses,
+      }))
+      .sort((a, b) => b.avg - a.avg);
   }
 
   function calculateSemesterCGPA(courses) {
-    // Create a deep copy of the original courses to ensure we don't modify them
     const coursesCopy = JSON.parse(JSON.stringify(courses));
-    // Fill up null values in the array
     coursesCopy.forEach((course, index) => {
       if (index > 0) {
         const prevCourse = coursesCopy[index - 1];
@@ -928,85 +851,48 @@
       }
     });
 
-    // Group courses by semester and year
     const semesterGroups = {};
     const semesterKeys = new Set();
 
     coursesCopy.forEach((course) => {
       const gradePoint = gradeMap[course.grade];
-      if (!course.grade || gradePoint === undefined || gradePoint === null) {
-        return; // Skip courses with no grade or invalid grade
-      }
-
+      if (!course.grade || gradePoint === undefined || gradePoint === null) return;
       const key =
         course.semester && course.year
           ? `${course.semester} ${course.year}`
           : "Unknown";
-
-      if (!semesterGroups[key]) {
-        semesterGroups[key] = [];
-      }
-
+      if (!semesterGroups[key]) semesterGroups[key] = [];
       semesterGroups[key].push(course);
       semesterKeys.add(key);
     });
-
-    // Sort semesters chronologically
-    function getSemesterOrder(semesterName) {
-      const lowerSemester = semesterName.toLowerCase();
-      if (lowerSemester.includes("spring")) return 1;
-      if (lowerSemester.includes("summer")) return 2;
-      if (lowerSemester.includes("fall")) return 3;
-      if (lowerSemester.includes("intersession")) return 4;
-      return 5; // For any unknown semester types
-    }
 
     const semesterOrder = Array.from(semesterKeys)
       .filter((key) => key !== "Unknown")
       .sort((a, b) => {
         const [semesterA, yearA] = a.split(" ");
         const [semesterB, yearB] = b.split(" ");
-
         const yearDiff = parseInt(yearA) - parseInt(yearB);
-        if (yearDiff !== 0) {
-          return yearDiff;
-        }
-
-        // Same year, sort by semester order
+        if (yearDiff !== 0) return yearDiff;
         return getSemesterOrder(semesterA) - getSemesterOrder(semesterB);
       });
+    if (semesterKeys.has("Unknown")) semesterOrder.push("Unknown");
 
-    // Add "Unknown" at the end if it exists
-    if (semesterKeys.has("Unknown")) {
-      semesterOrder.push("Unknown");
-    }
-
-    // Arrays for chart data
     const semesters = [];
     const cgpaValues = [];
     const totalCredits = [];
     const courseCounts = [];
     const semesterCredits = [];
-    const semesterGPAs = []; // New array to store individual semester GPAs    // Track cumulative data for CGPA calculation
-    let cumulativeCourses = [];
-    let cumulativePoints = 0;
-    let cumulativeCredits = 0;
+    const semesterGPAs = [];
 
-    // For tracking best grades of each course
     let bestGradesByCourseCode = {};
 
-    // Process semesters in the order they appear in the transcript
     semesterOrder.forEach((semesterKey) => {
-      const semesterCourses = semesterGroups[semesterKey];
-
-      // Calculate per-semester statistics
+      const semCourses = semesterGroups[semesterKey];
       let semesterTotalCredits = 0;
       let semesterTotalPoints = 0;
-
-      // For each semester, track the best grade for each course code
       const semesterBestGrades = {};
 
-      semesterCourses.forEach((course) => {
+      semCourses.forEach((course) => {
         if (
           course.grade &&
           gradeMap[course.grade] !== undefined &&
@@ -1014,12 +900,9 @@
           course.credits > 0
         ) {
           const coursePoints = gradeMap[course.grade] * course.credits;
-
-          // Add to semester totals - for semester GPA, count all courses
           semesterTotalPoints += coursePoints;
           semesterTotalCredits += course.credits;
 
-          // Track best grade for each course code in this semester
           const code = course.code;
           if (
             !semesterBestGrades[code] ||
@@ -1027,45 +910,33 @@
           ) {
             semesterBestGrades[code] = course;
           }
-
-          // Track best grade for each course code across all semesters
           if (
             !bestGradesByCourseCode[code] ||
-            gradeMap[course.grade] >
-              gradeMap[bestGradesByCourseCode[code].grade]
+            gradeMap[course.grade] > gradeMap[bestGradesByCourseCode[code].grade]
           ) {
             bestGradesByCourseCode[code] = course;
           }
         }
       });
 
-      // Calculate cumulative GPA using only best grades for each course code
-      cumulativePoints = 0;
-      cumulativeCredits = 0;
+      let cumulativePoints = 0;
+      let cumulativeCredits = 0;
       Object.values(bestGradesByCourseCode).forEach((course) => {
         cumulativePoints += gradeMap[course.grade] * course.credits;
         cumulativeCredits += course.credits;
       });
 
-      // Calculate semester GPA (includes all courses in the semester)
       const semesterGPA =
-        semesterTotalCredits > 0
-          ? semesterTotalPoints / semesterTotalCredits
-          : 0;
-
+        semesterTotalCredits > 0 ? semesterTotalPoints / semesterTotalCredits : 0;
       const cgpa =
         cumulativeCredits > 0 ? cumulativePoints / cumulativeCredits : 0;
 
-      // Add all data points for this semester
       semesters.push(semesterKey);
       cgpaValues.push(parseFloat(cgpa.toFixed(2)));
       totalCredits.push(cumulativeCredits);
       semesterCredits.push(semesterTotalCredits);
-      courseCounts.push(semesterCourses.length);
-      semesterGPAs.push(parseFloat(semesterGPA.toFixed(2))); // Add the semester GPA
-
-      // Add this semester's courses to our running list
-      cumulativeCourses = [...cumulativeCourses, ...semesterCourses];
+      courseCounts.push(semCourses.length);
+      semesterGPAs.push(parseFloat(semesterGPA.toFixed(2)));
     });
 
     return {
@@ -1074,219 +945,544 @@
       totalCredits,
       courseCounts,
       semesterCredits,
-      semesterGPAs, // Return the semester GPAs array
+      semesterGPAs,
     };
   }
 
-  function renderCGPAChart(data) {
-    const ctx = document.getElementById("cgpa-chart");
+  function buildChartConfig(data) {
+    const cgpaDataset = {
+      label: "CGPA",
+      data: data.cgpaValues,
+      backgroundColor: "rgba(54, 162, 235, 0.2)",
+      borderColor: "rgba(54, 162, 235, 1)",
+      borderWidth: 2,
+      pointBackgroundColor: "rgba(54, 162, 235, 1)",
+      pointRadius: 5,
+      tension: 0.1,
+      fill: chartMode === "cgpa",
+      hidden: chartMode === "sgpa",
+    };
 
-    if (!ctx) {
-      console.error("Chart canvas element not found");
+    const sgpaDataset = {
+      label: "Semester GPA",
+      data: data.semesterGPAs,
+      backgroundColor: "rgba(40, 167, 69, 0.15)",
+      borderColor: "rgba(40, 167, 69, 1)",
+      borderWidth: 2,
+      borderDash: [6, 4],
+      pointBackgroundColor: "rgba(40, 167, 69, 1)",
+      pointRadius: 4,
+      tension: 0.1,
+      fill: chartMode === "sgpa",
+      hidden: chartMode === "cgpa",
+    };
+
+    const visibleValues = []
+      .concat(chartMode !== "sgpa" ? data.cgpaValues : [])
+      .concat(chartMode !== "cgpa" ? data.semesterGPAs : [])
+      .filter((v) => v > 0);
+    const minV = Math.min(...visibleValues);
+    const maxV = Math.max(...visibleValues);
+    const range = maxV - minV;
+    const buffer = Math.max(0.2, range * 0.15);
+    const yMin = Math.max(0, Math.floor((minV - buffer) * 10) / 10);
+    const yMax = Math.min(4.0, Math.ceil((maxV + buffer) * 10) / 10);
+    const visibleRange = yMax - yMin;
+    let stepSize = 0.5;
+    if (visibleRange <= 0.5) stepSize = 0.1;
+    else if (visibleRange <= 1) stepSize = 0.2;
+    else if (visibleRange <= 2) stepSize = 0.25;
+
+    return {
+      type: "line",
+      data: {
+        labels: data.semesters,
+        datasets: [cgpaDataset, sgpaDataset],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        scales: {
+          y: {
+            beginAtZero: false,
+            min: yMin,
+            max: yMax,
+            ticks: {
+              callback: (v) => v.toFixed(1),
+              stepSize: stepSize,
+            },
+            title: { display: true, text: "GPA" },
+            grid: {
+              color: (ctx) =>
+                ctx.tick && ctx.tick.value === 4
+                  ? "rgba(0, 0, 0, 0.8)"
+                  : "rgba(0, 0, 0, 0.1)",
+              lineWidth: (ctx) =>
+                ctx.tick && ctx.tick.value === 4 ? 1.5 : 1,
+            },
+          },
+          x: { title: { display: true, text: "Semester" } },
+        },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              title: (ctxs) =>
+                data.semesters[ctxs[0].dataIndex] || "Unknown Semester",
+              afterTitle: (ctxs) => {
+                const idx = ctxs[0].dataIndex;
+                return `Semester GPA: ${data.semesterGPAs[idx]}, Courses: ${data.courseCounts[idx]}, Semester Credits: ${data.semesterCredits[idx]}, Total Credits: ${data.totalCredits[idx]}`;
+              },
+              label: (ctx) => {
+                let label = ctx.dataset.label || "";
+                if (label) label += ": ";
+                if (ctx.parsed.y !== null) label += ctx.parsed.y.toFixed(2);
+                return label;
+              },
+            },
+          },
+          legend: { position: "top" },
+          title: { display: true, text: CHART_TITLES[chartMode] || "CGPA Progression by Semester" },
+        },
+      },
+    };
+  }
+
+  function buildPieChartConfig(distData) {
+    const total = distData.data.reduce((a, b) => a + b, 0);
+    return {
+      type: "doughnut",
+      data: {
+        labels: distData.grades,
+        datasets: [
+          {
+            data: distData.data,
+            backgroundColor: distData.colors,
+            borderColor: "#ffffff",
+            borderWidth: 2,
+            hoverOffset: 6,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "right",
+            labels: { boxWidth: 14, padding: 10 },
+          },
+          title: { display: true, text: CHART_TITLES.distribution },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const value = ctx.parsed;
+                const pct = total > 0 ? ((value / total) * 100).toFixed(1) : "0.0";
+                return `${ctx.label}: ${value} course${value !== 1 ? "s" : ""} (${pct}%)`;
+              },
+            },
+          },
+        },
+      },
+    };
+  }
+
+  function buildCreditsBarConfig(data) {
+    return {
+      type: "bar",
+      data: {
+        labels: data.semesters,
+        datasets: [
+          {
+            label: "Credits",
+            data: data.credits,
+            backgroundColor: "rgba(54, 162, 235, 0.7)",
+            borderColor: "rgba(54, 162, 235, 1)",
+            borderWidth: 1,
+            borderRadius: 4,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: "Credits" },
+            ticks: { stepSize: 3 },
+          },
+          x: { title: { display: true, text: "Semester" } },
+        },
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: CHART_TITLES.credits },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.parsed.y} credit${ctx.parsed.y !== 1 ? "s" : ""}`,
+            },
+          },
+        },
+      },
+    };
+  }
+
+  function buildFacultyBarConfig(data) {
+    const colorFor = (avg) => {
+      if (avg >= 3.7) return "rgba(40, 167, 69, 0.75)";
+      if (avg >= 3.0) return "rgba(54, 162, 235, 0.75)";
+      if (avg >= 2.0) return "rgba(255, 193, 7, 0.75)";
+      return "rgba(220, 53, 69, 0.75)";
+    };
+    return {
+      type: "bar",
+      data: {
+        labels: data.map((d) => d.name),
+        datasets: [
+          {
+            label: "Average GPA",
+            data: data.map((d) => d.avg),
+            backgroundColor: data.map((d) => colorFor(d.avg)),
+            borderWidth: 0,
+            borderRadius: 4,
+          },
+        ],
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            beginAtZero: true,
+            max: 4.0,
+            title: { display: true, text: "Average GPA" },
+            ticks: { stepSize: 0.5 },
+          },
+          y: {
+            ticks: { autoSkip: false, font: { size: 11 } },
+          },
+        },
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: CHART_TITLES.faculty },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const item = data[ctx.dataIndex];
+                return [
+                  `Average GPA: ${item.avg.toFixed(2)}`,
+                  `Courses: ${item.count}`,
+                ].concat(item.courses.map((c) => `  • ${c}`));
+              },
+            },
+          },
+        },
+      },
+    };
+  }
+
+  function renderHeatmap(courses, container) {
+    const filled = fillSemesterYear(courses);
+    const groups = {};
+    filled.forEach((c) => {
+      if (!c.semester || !c.year) return;
+      const key = `${c.semester} ${c.year}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(c);
+    });
+    const semesters = sortSemesterKeys(Object.keys(groups));
+
+    if (semesters.length === 0) {
+      container.innerHTML = '<div class="alert alert-warning" style="margin: 10px;">No grade data to display.</div>';
       return;
     }
 
-    // Check if Chart.js is available
+    const escapeHtml = (s) =>
+      String(s || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
+    const html = semesters
+      .map((key) => {
+        const cells = groups[key]
+          .map((c) => {
+            const color = GRADE_COLORS[c.grade] || "#bdc3c7";
+            const tip = `${c.code} - ${c.title} (${c.grade || "—"})`;
+            return `<div title="${escapeHtml(tip)}" style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;background:${color};color:#fff;border-radius:6px;padding:6px 10px;margin:3px;font-size:11px;min-width:64px;font-weight:600;text-align:center;cursor:default;">
+              <div style="font-size:11px;line-height:1.1;">${escapeHtml(c.code)}</div>
+              <div style="font-size:14px;margin-top:2px;">${escapeHtml(c.grade || "—")}</div>
+            </div>`;
+          })
+          .join("");
+
+        return `<div style="display:flex;align-items:center;border-bottom:1px solid #eee;padding:8px 4px;">
+          <div style="width:140px;flex-shrink:0;font-weight:600;color:#555;font-size:13px;">${escapeHtml(key)}</div>
+          <div style="flex:1;display:flex;flex-wrap:wrap;">${cells}</div>
+        </div>`;
+      })
+      .join("");
+
+    container.innerHTML = `<div style="padding: 4px 8px;">${html}</div>`;
+  }
+
+  function renderCGPAChart() {
+    const ctx = document.getElementById("cgpa-chart");
+    const heatmapDiv = document.getElementById("grade-heatmap");
+    const chartOuter = document.getElementById("cgpa-chart-outer");
+    const chartWrapper = document.getElementById("cgpa-chart-wrapper");
+    if (!ctx || !heatmapDiv || !chartOuter || !chartWrapper) return;
+
     if (typeof Chart === "undefined") {
-      console.error("Chart.js library not loaded");
-      document.getElementById("cgpa-chart-panel").innerHTML =
+      const panel = document.getElementById("cgpa-chart-panel");
+      if (panel) panel.innerHTML =
         '<div class="alert alert-danger">Chart.js library not available. Please refresh the page.</div>';
       return;
     }
 
-    try {
-      // Calculate appropriate min and max values for y-axis to create a zoomed-in effect
-      const cgpaValues = data.cgpaValues;
-      if (!cgpaValues || cgpaValues.length === 0) {
-        console.error("No CGPA values available for chart");
-        return;
-      }
-
-      // Find the min and max CGPA values
-      const minCGPA = Math.min(...cgpaValues);
-      const maxCGPA = Math.max(...cgpaValues);
-
-      // Calculate a better y-axis range with buffer space (zoom in on the relevant range)
-      // Use a buffer of 0.2 or 15% of the range, whichever is larger
-      const range = maxCGPA - minCGPA;
-      const buffer = Math.max(0.2, range * 0.15);
-
-      // Set limits, ensuring we don't go below 0 or above 4.0
-      const yMin = Math.max(0, Math.floor((minCGPA - buffer) * 10) / 10);
-      const yMax = Math.min(4.0, Math.ceil((maxCGPA + buffer) * 10) / 10);
-
-      // Determine appropriate step size based on the visible range
-      const visibleRange = yMax - yMin;
-      let stepSize = 0.5; // default
-
-      if (visibleRange <= 0.5) stepSize = 0.1;
-      else if (visibleRange <= 1) stepSize = 0.2;
-      else if (visibleRange <= 2) stepSize = 0.25;
-
-      // Create the chart
-      const cgpaChart = new Chart(ctx, {
-        type: "line",
-        data: {
-          labels: data.semesters,
-          datasets: [
-            {
-              label: "CGPA",
-              data: data.cgpaValues,
-              backgroundColor: "rgba(54, 162, 235, 0.2)",
-              borderColor: "rgba(54, 162, 235, 1)",
-              borderWidth: 2,
-              pointBackgroundColor: "rgba(54, 162, 235, 1)",
-              pointRadius: 5,
-              tension: 0.1,
-              fill: true, // Fill area under the curve
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            y: {
-              beginAtZero: false,
-              min: yMin,
-              max: yMax,
-              ticks: {
-                callback: function (value, index, values) {
-                  return value.toFixed(1);
-                },
-                stepSize: stepSize,
-              },
-              title: {
-                display: true,
-                text: "CGPA",
-              },
-              grid: {
-                color: function (context) {
-                  // Make the grid line at y=4 black and thicker
-                  if (context.tick && context.tick.value === 4) {
-                    return "rgba(0, 0, 0, 0.8)";
-                  }
-                  // Regular grid lines
-                  return "rgba(0, 0, 0, 0.1)";
-                },
-                lineWidth: function (context) {
-                  // Make the grid line at y=4 thicker
-                  if (context.tick && context.tick.value === 4) {
-                    return 1.5;
-                  }
-                  // Regular grid line width
-                  return 1;
-                },
-              },
-            },
-            x: {
-              title: {
-                display: true,
-                text: "Semester",
-              },
-            },
-          },
-          plugins: {
-            tooltip: {
-              callbacks: {
-                title: function (context) {
-                  const index = context[0].dataIndex;
-                  return data.semesters[index] || "Unknown Semester";
-                },
-                afterTitle: function (context) {
-                  const index = context[0].dataIndex;
-                  return `Semester GPA: ${data.semesterGPAs[index]}, Courses: ${data.courseCounts[index]}, Semester Credits: ${data.semesterCredits[index]}, Total Credits: ${data.totalCredits[index]}`;
-                },
-                label: function (context) {
-                  let label = context.dataset.label || "";
-                  if (label) {
-                    label += ": ";
-                  }
-                  if (context.parsed.y !== null) {
-                    label += context.parsed.y.toFixed(2);
-                  }
-                  return label;
-                },
-              },
-            },
-            legend: {
-              position: "top",
-            },
-            title: {
-              display: true,
-              text: "CGPA Progression by Semester",
-            },
-          },
-        },
-      });
-    } catch (error) {
-      console.error("Error creating chart:", error);
-      if (document.getElementById("cgpa-chart-panel")) {
-        document.getElementById("cgpa-chart-panel").innerHTML =
-          '<div class="alert alert-danger">Failed to create chart. Error: ' +
-          error.message +
-          "</div>";
-      }
+    if (chartInstance) {
+      chartInstance.destroy();
+      chartInstance = null;
     }
-  }
 
-  function updateChartStatistics(cgpaValues) {
-    if (cgpaValues.length === 0) return;
-
-    const statsElements = {
-      highest: document.getElementById("highest-cgpa"),
-      lowest: document.getElementById("lowest-cgpa"),
-      average: document.getElementById("average-cgpa"),
-    };
-
-    // Check if elements exist
-    if (
-      !statsElements.highest ||
-      !statsElements.lowest ||
-      !statsElements.average
-    ) {
-      console.error("Stats elements not found");
+    // Heatmap mode: hide canvas wrapper, show heatmap div
+    if (chartMode === "heatmap") {
+      chartOuter.style.display = "none";
+      heatmapDiv.style.display = "block";
+      renderHeatmap(originalCourses, heatmapDiv);
+      updateSidePanel(chartMode);
       return;
     }
 
-    // Calculate statistics
-    const highest = Math.max(...cgpaValues).toFixed(2);
-    const lowest = Math.min(...cgpaValues).toFixed(2);
-    const average = (
-      cgpaValues.reduce((a, b) => a + b, 0) / cgpaValues.length
-    ).toFixed(2);
+    chartOuter.style.display = "";
+    heatmapDiv.style.display = "none";
 
-    // Update the DOM
-    statsElements.highest.textContent = highest;
-    statsElements.lowest.textContent = lowest;
-    statsElements.average.textContent = average;
+    // Faculty mode needs taller canvas to fit all bars
+    if (chartMode === "faculty") {
+      const rows = (facultyData && facultyData.length) || 0;
+      chartWrapper.style.height = Math.max(320, rows * 26) + "px";
+    } else {
+      chartWrapper.style.height = "100%";
+    }
+
+    let config;
+    if (chartMode === "distribution") {
+      if (!gradeDistData || gradeDistData.grades.length === 0) {
+        chartOuter.innerHTML = '<div class="alert alert-warning">No grade data available to display.</div>';
+        return;
+      }
+      config = buildPieChartConfig(gradeDistData);
+    } else if (chartMode === "credits") {
+      if (!creditsData || creditsData.semesters.length === 0) {
+        chartOuter.innerHTML = '<div class="alert alert-warning">No credit data available to display.</div>';
+        return;
+      }
+      config = buildCreditsBarConfig(creditsData);
+    } else if (chartMode === "faculty") {
+      if (!facultyData || facultyData.length === 0) {
+        chartOuter.innerHTML = '<div class="alert alert-warning">No faculty data available to display.</div>';
+        return;
+      }
+      config = buildFacultyBarConfig(facultyData);
+    } else {
+      if (!chartData || chartData.semesters.length === 0) {
+        chartOuter.innerHTML = '<div class="alert alert-warning">No semester data available to display in the chart.</div>';
+        return;
+      }
+      config = buildChartConfig(chartData);
+    }
+
+    chartInstance = new Chart(ctx, config);
+    updateSidePanel(chartMode);
   }
 
-  // Initialize the chart after the page has fully loaded
-  // Use a more reliable approach with multiple attempts if needed
-  function attemptChartInitialization(attemptsLeft = 3) {
-    if (document.getElementById("cgpa-chart")) {
-      console.log("Chart container found, initializing chart");
-      initializeChart();
-    } else if (attemptsLeft > 0) {
-      console.log(
-        `Chart container not found yet, ${attemptsLeft} attempts left`
-      );
-      createChartContainerIfNeeded();
-      setTimeout(() => attemptChartInitialization(attemptsLeft - 1), 500);
-    } else {
-      console.error(
-        "Failed to find or create chart container after multiple attempts"
-      );
+  function fmt(n, digits = 2) {
+    return Number.isFinite(n) ? n.toFixed(digits) : "—";
+  }
+
+  function updateSidePanel(mode) {
+    const panel = document.getElementById("chart-side-panel");
+    if (!panel) return;
+
+    let html = "";
+
+    if (mode === "both" || mode === "cgpa") {
+      const cgpas = (chartData && chartData.cgpaValues) ? chartData.cgpaValues.filter((v) => v > 0) : [];
+      const highest = cgpas.length ? fmt(Math.max(...cgpas)) : "—";
+      const lowest = cgpas.length ? fmt(Math.min(...cgpas)) : "—";
+      const avg = cgpas.length ? fmt(cgpas.reduce((a, b) => a + b, 0) / cgpas.length) : "—";
+      html = `
+        <h4>CGPA Trends</h4>
+        <p>Track how your CGPA has progressed over time.</p>
+        <p><small>Hover over each point to see details.</small></p>
+        <div style="margin-top: 15px;">
+          <p>Highest CGPA: <strong>${highest}</strong></p>
+          <p>Lowest CGPA: <strong>${lowest}</strong></p>
+          <p>Average CGPA: <strong>${avg}</strong></p>
+        </div>
+      `;
+    } else if (mode === "sgpa") {
+      const valid = chartData
+        ? chartData.semesterGPAs
+            .map((v, i) => ({ v, key: chartData.semesters[i] }))
+            .filter((x) => x.v > 0)
+        : [];
+      let bestKey = "—", worstKey = "—", best = "—", worst = "—", avg = "—";
+      if (valid.length) {
+        const bestEntry = valid.reduce((a, b) => (b.v > a.v ? b : a));
+        const worstEntry = valid.reduce((a, b) => (b.v < a.v ? b : a));
+        best = fmt(bestEntry.v); bestKey = bestEntry.key;
+        worst = fmt(worstEntry.v); worstKey = worstEntry.key;
+        avg = fmt(valid.reduce((s, x) => s + x.v, 0) / valid.length);
+      }
+      html = `
+        <h4>Semester GPA Trends</h4>
+        <p>Per-semester GPA highs and lows.</p>
+        <p><small>Hover over each point to see details.</small></p>
+        <div style="margin-top: 15px;">
+          <p>Best: <strong>${best}</strong> ${best !== "—" ? `<small>(${bestKey})</small>` : ""}</p>
+          <p>Worst: <strong>${worst}</strong> ${worst !== "—" ? `<small>(${worstKey})</small>` : ""}</p>
+          <p>Average: <strong>${avg}</strong></p>
+        </div>
+      `;
+    } else if (mode === "distribution") {
+      const counts = (gradeDistData && gradeDistData.data) || [];
+      const total = counts.reduce((a, b) => a + b, 0);
+      let mostCommon = "—", mostCommonCount = 0;
+      if (gradeDistData) {
+        gradeDistData.data.forEach((cnt, i) => {
+          if (cnt > mostCommonCount) {
+            mostCommonCount = cnt;
+            mostCommon = gradeDistData.grades[i];
+          }
+        });
+      }
+      const distinct = (gradeDistData && gradeDistData.grades.length) || 0;
+      html = `
+        <h4>Grade Breakdown</h4>
+        <p>Your overall grade distribution.</p>
+        <p><small>Hover over each slice for details.</small></p>
+        <div style="margin-top: 15px;">
+          <p>Total courses: <strong>${total}</strong></p>
+          <p>Most common: <strong>${mostCommon}</strong>${mostCommonCount > 0 ? ` <small>(${mostCommonCount} course${mostCommonCount !== 1 ? "s" : ""})</small>` : ""}</p>
+          <p>Distinct grades: <strong>${distinct}</strong></p>
+        </div>
+      `;
+    } else if (mode === "credits") {
+      let totalCr = 0, avgCr = "—", maxCr = "—", minCr = "—", maxKey = "", minKey = "";
+      if (creditsData && creditsData.semesters.length) {
+        totalCr = creditsData.credits.reduce((a, b) => a + b, 0);
+        avgCr = fmt(totalCr / creditsData.semesters.length, 1);
+        let maxIdx = 0, minIdx = 0;
+        creditsData.credits.forEach((v, i) => {
+          if (v > creditsData.credits[maxIdx]) maxIdx = i;
+          if (v < creditsData.credits[minIdx]) minIdx = i;
+        });
+        maxCr = fmt(creditsData.credits[maxIdx], 1);
+        maxKey = creditsData.semesters[maxIdx];
+        minCr = fmt(creditsData.credits[minIdx], 1);
+        minKey = creditsData.semesters[minIdx];
+      }
+      html = `
+        <h4>Credit Summary</h4>
+        <p>Credit load across semesters.</p>
+        <p><small>Hover over bars for details.</small></p>
+        <div style="margin-top: 15px;">
+          <p>Total credits: <strong>${fmt(totalCr, 1)}</strong></p>
+          <p>Avg per semester: <strong>${avgCr}</strong></p>
+          <p>Heaviest: <strong>${maxCr}</strong> ${maxKey ? `<small>(${maxKey})</small>` : ""}</p>
+          <p>Lightest: <strong>${minCr}</strong> ${minKey ? `<small>(${minKey})</small>` : ""}</p>
+        </div>
+      `;
+    } else if (mode === "heatmap") {
+      const filled = fillSemesterYear(originalCourses);
+      const semKeys = new Set();
+      let totalCourses = 0, totalCr = 0;
+      filled.forEach((c) => {
+        if (!c.semester || !c.year) return;
+        semKeys.add(`${c.semester} ${c.year}`);
+        totalCourses += 1;
+        totalCr += c.credits || 0;
+      });
+      html = `
+        <h4>Heatmap Overview</h4>
+        <p>Your transcript at a glance, colored by grade.</p>
+        <p><small>Hover over a tile for course details.</small></p>
+        <div style="margin-top: 15px;">
+          <p>Semesters: <strong>${semKeys.size}</strong></p>
+          <p>Courses: <strong>${totalCourses}</strong></p>
+          <p>Total credits: <strong>${fmt(totalCr, 1)}</strong></p>
+        </div>
+      `;
+    } else if (mode === "faculty") {
+      let count = 0, top = "—", topAvg = "—", overall = "—";
+      if (facultyData && facultyData.length) {
+        count = facultyData.length;
+        top = facultyData[0].name;
+        topAvg = fmt(facultyData[0].avg);
+        overall = fmt(facultyData.reduce((s, f) => s + f.avg, 0) / facultyData.length);
+      }
+      html = `
+        <h4>Faculty Insights</h4>
+        <p>Average grade earned per faculty.</p>
+        <p><small>Hover over bars for the course list.</small></p>
+        <div style="margin-top: 15px;">
+          <p>Faculty taken: <strong>${count}</strong></p>
+          <p>Top: <strong>${topAvg}</strong> ${top !== "—" ? `<small>(${top})</small>` : ""}</p>
+          <p>Avg across faculty: <strong>${overall}</strong></p>
+        </div>
+      `;
+    }
+
+    panel.innerHTML = html;
+  }
+
+  function initializeChart() {
+    chartData = calculateSemesterCGPA(originalCourses);
+    gradeDistData = calculateGradeDistribution(originalCourses);
+    creditsData = calculateCreditsPerSemester(originalCourses);
+    facultyData = calculateFacultyStats(originalCourses);
+    if (
+      chartData.semesters.length === 0 &&
+      gradeDistData.grades.length === 0 &&
+      creditsData.semesters.length === 0 &&
+      facultyData.length === 0
+    ) {
+      const panel = document.getElementById("cgpa-chart-panel");
+      if (panel) panel.innerHTML =
+        '<div class="alert alert-warning">No data available to display in the chart.</div>';
+      return;
+    }
+    renderCGPAChart();
+
+    // Mode toggle
+    const toggle = document.getElementById("chart-mode-toggle");
+    if (toggle) {
+      toggle.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-mode]");
+        if (!btn) return;
+        toggle.querySelectorAll("button").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        chartMode = btn.dataset.mode;
+        renderCGPAChart();
+      });
     }
   }
 
-  // Start the chart initialization process when page is fully loaded
+  function attemptChartInitialization(attemptsLeft = 3) {
+    if (document.getElementById("cgpa-chart")) {
+      initializeChart();
+    } else if (attemptsLeft > 0) {
+      setTimeout(() => attemptChartInitialization(attemptsLeft - 1), 500);
+    } else {
+      console.error("[NSU RDS Buddy] Failed to find chart container.");
+    }
+  }
+
   window.addEventListener("load", function () {
-    console.log("Window loaded, starting chart initialization");
-    // Try to create the chart container first
-    createChartContainerIfNeeded();
-    // Then attempt to initialize the chart with a delay and retry mechanism
     setTimeout(() => attemptChartInitialization(), 1000);
   });
 })();

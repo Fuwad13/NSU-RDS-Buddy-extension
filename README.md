@@ -11,10 +11,10 @@ A Chrome extension that enhances the North South University (NSU) RDS portal wit
 ![What-If CGPA Calculator](images/what-if-calculator.png)
 _The What-If Calculator allows you to simulate grade changes and immediately see the impact on your CGPA_
 
-### CGPA Progression Chart
+### Academic Performance Insights
 
-![CGPA Progression Chart](images/cgpa-chart.png)
-_Track your academic performance over time with the interactive CGPA progression chart_
+![Academic Performance Insights](images/cgpa-chart.png)
+_Multiple chart views — track CGPA progression, grade distribution, credit load, faculty stats, and more_
 
 ## Features
 
@@ -23,18 +23,23 @@ _Track your academic performance over time with the interactive CGPA progression
 Calculate how future or hypothetical grades would impact your CGPA.
 
 - Change grades for existing courses to see immediate CGPA impact
-- Add new courses with hypothetical grades
-- Reset individual courses to original grades
-- View impact with color-coded indicators showing improvement or decline
-- Global reset function to revert all changes
+- Add new courses with hypothetical grades (modal supports `Esc` to close, click-outside to dismiss, auto-focus on first field)
+- Reset individual courses to original grades, or remove them entirely with the trash button
+- Color-coded delta badge shows improvement (green) or decline (red) at a glance
+- Global "Reset to Original" button to revert all changes
+- Supports the full NSU grade scale: `A`, `A-`, `B+`, `B`, `B-`, `C+`, `C`, `C-`, `D+`, `D`, `F`, plus `W`, `I`, and `X` (which don't contribute to CGPA)
 
-### 2. CGPA Progression Chart
+### 2. Academic Performance Insights
 
-Visualize your academic performance over time.
+A multi-tab analytics panel with seven different views of your academic data. The summary on the right updates with stats relevant to the active tab.
 
-- Interactive line chart displaying CGPA progression by semester
-- Detailed tooltips showing semester GPA, course count, and credits
-- Automatically highlights key statistics (highest, lowest, average CGPA)
+- **CGPA & Semester GPA** — line chart comparing cumulative GPA against per-semester GPA
+- **CGPA** — focused view of CGPA progression with a filled area
+- **Semester GPA** — focused view of per-semester GPA, including best and worst semesters
+- **Grade Distribution** — doughnut chart showing the share of each grade you've earned, with hover tooltips for percentages
+- **Credit Load** — bar chart of credits taken per semester (catches overload/underload patterns)
+- **Grade Heatmap** — a transcript-at-a-glance grid: each row is a semester, each course is a colored tile labeled with code and grade
+- **Faculty Grades** — horizontal bar chart of average GPA earned per faculty, sorted highest-first; tooltip lists every course you took with each faculty
 
 ## Installation
 
@@ -58,19 +63,21 @@ Visualize your academic performance over time.
 2. Navigate to your grade history page
 3. Scroll to the bottom of the page to see:
    - The What-If CGPA Calculator
-   - CGPA Progression Chart
+   - Academic Performance Insights (multi-tab chart panel)
 
 ### Using the What-If Calculator
 
 - Change grades using the dropdown menus to see immediate CGPA impact
-- Click the "+" button to add hypothetical new courses
-- Use the reset button (↻) next to modified courses to revert individual changes
+- Click "+ Add New Course" to add a hypothetical course (the modal accepts `Esc` to close)
+- Use the reset button (↻) next to modified courses to revert individual grade changes
+- Use the trash button (🗑) to remove a course from the calculation
 - Use the global "Reset to Original" button to clear all changes
 
-### Using the CGPA Chart
+### Using Academic Performance Insights
 
-- Hover over data points to see detailed semester information
-- View summary statistics on the right side of the chart
+- Switch between tabs (CGPA & Semester GPA, CGPA, Semester GPA, Grade Distribution, Credit Load, Grade Heatmap, Faculty Grades) using the toggle in the panel header
+- Hover over data points, bars, slices, or heatmap tiles for detailed information
+- The summary panel on the right updates contextually to the active tab — showing things like best/worst semester, total credits, most common grade, top faculty, etc.
 
 ## Privacy
 
@@ -79,7 +86,7 @@ This extension:
 - Operates entirely within your browser
 - Does not collect or transmit any personal data
 - Does not store your academic records on any external servers
-- Uses local storage only for saving your what-if scenarios between sessions
+- All what-if calculations are scoped to the current page session
 
 ## Development
 

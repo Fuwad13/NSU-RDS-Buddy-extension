@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "NSU RDS Buddy",
-  "version": "0.1.2",
-  "description": "Calculate what-if CGPA and visulaize your academic progression.",
+  "version": "0.2.0",
+  "description": "Calculate what-if CGPA and visualize your academic progression.",
   "icons": {
     "16": "icons/gpa16.png",
     "48": "icons/gpa64.png",

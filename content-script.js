@@ -337,6 +337,15 @@
     return gp === undefined ? null : gp; // W/I/X → null
   }
 
+  function isStrictlyLowerGradeThan(course, countedCourse) {
+    const thisGp = getGradePoint(course);
+    const countedGp = getGradePoint(countedCourse);
+    return (
+      (thisGp === null && countedGp !== null) ||
+      (thisGp !== null && countedGp !== null && thisGp < countedGp)
+    );
+  }
+
   // Best grade wins for retakes; most recent breaks ties. Non-countable grades lose to any valid grade.
   function isBetterCountedAttempt(candidate, current, candidateIdx, currentIdx) {
     const candidateGp = getGradePoint(candidate);
@@ -523,10 +532,16 @@
       let retakeBadge = "";
       if (isCountedRetake) {
         retakeBadge =
-          ' <span class="label label-success" style="font-weight: normal; font-size: 10px; vertical-align: middle;" title="This course was retaken; the highest grade is used for CGPA">Course retaken — highest grade</span>';
+          ' <span class="label label-success" style="font-weight: normal; font-size: 10px; vertical-align: middle;" title="This course was retaken; the highest grade is used for CGPA (most recent wins ties)">Course retaken — highest grade</span>';
       } else if (isSupersededRetake) {
-        retakeBadge =
-          ' <span class="label label-default" style="font-weight: normal; font-size: 10px; vertical-align: middle; background-color: #adb5bd;" title="A better grade exists for this course; these credits are not counted">Lower grade — credits not counted</span>';
+        const countedCourse = courses[countedByCode[c.code]];
+        if (isStrictlyLowerGradeThan(c, countedCourse)) {
+          retakeBadge =
+            ' <span class="label label-default" style="font-weight: normal; font-size: 10px; vertical-align: middle; background-color: #adb5bd;" title="A better grade exists for this course; these credits are not counted">Course retaken — Lower grade</span>';
+        } else {
+          retakeBadge =
+            ' <span class="label label-default" style="font-weight: normal; font-size: 10px; vertical-align: middle; background-color: #adb5bd;" title="Same grade as the counted attempt; the most recent attempt is used and these credits are not counted">Earlier attempt — credits not counted</span>';
+        }
       }
 
       row.innerHTML = `
@@ -1325,8 +1340,15 @@
             const color = isUncountedRetake
               ? UNCOUNTED_RETAKE_COLOR
               : GRADE_COLORS[c.grade] || "#bdc3c7";
+            const countedCourse = isUncountedRetake
+              ? filled[countedByCode[c.code]]
+              : null;
             const tip = isUncountedRetake
-              ? `${c.code} - ${c.title} (${c.grade || "—"}) — uncounted retake (lower grade)`
+              ? `${c.code} - ${c.title} (${c.grade || "—"}) — uncounted retake (${
+                  isStrictlyLowerGradeThan(c, countedCourse)
+                    ? "lower grade"
+                    : "earlier attempt"
+                })`
               : isRetake
                 ? `${c.code} - ${c.title} (${c.grade || "—"}) — counted (highest grade)`
                 : `${c.code} - ${c.title} (${c.grade || "—"})`;

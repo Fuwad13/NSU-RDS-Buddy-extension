@@ -187,7 +187,7 @@
                   <p>What-If CGPA: <span id="whatif-result" style="font-weight: bold; color: #4285f4; font-size: 1.2em;">—</span></p>
                   <hr>
                   <p><small>Make changes to the grades of existing courses or add new courses to see how they affect your CGPA.</small></p>
-                  <p><small>In real cases, you can't retake any courses that have grade B+ or above. I, W, X grades don't contribute to your cgpa calculation.</small></p>
+                  <p><small>If a course is retaken, the highest grade counts toward CGPA (most recent wins ties); other attempts show 0 credits. I, W, X grades don't contribute to your cgpa calculation.</small></p>
                 </div>
               </div>
             </div>
@@ -295,6 +295,7 @@
                 <p>What-If CGPA: <span id="whatif-result" style="font-weight: bold; color: #4285f4; font-size: 1.2em;">—</span></p>
                 <hr>
                 <p><small>Make changes to the grades and credit hours to see how they affect your CGPA.</small></p>
+                <p><small>If a course is retaken, the highest grade counts toward CGPA (most recent wins ties); other attempts show 0 credits.</small></p>
               </div>
             </div>
           </div>
@@ -310,56 +311,143 @@
   // ===== State =====
   const originalCourses = JSON.parse(JSON.stringify(semesterCourses));
 
-  function calcCurrentCgpa() {
-    const validCourses = originalCourses.filter(
-      (c) =>
-        c.grade &&
-        gradeMap[c.grade] !== undefined &&
-        gradeMap[c.grade] !== null &&
-        c.credits > 0
+  function getCourseTimeKey(course) {
+    if (!course || !course.year || !course.semester) return null;
+    const year = parseInt(course.year, 10);
+    if (Number.isNaN(year)) return null;
+    return year * 10 + getSemesterOrder(course.semester);
+  }
+
+  // Later attempt wins on ties. Courses without semester/year (user-added) count as latest.
+  function isLaterAttempt(candidate, current, candidateIdx, currentIdx) {
+    const candidateTime = getCourseTimeKey(candidate);
+    const currentTime = getCourseTimeKey(current);
+    if (candidateTime !== null && currentTime !== null) {
+      if (candidateTime !== currentTime) return candidateTime > currentTime;
+      return candidateIdx > currentIdx;
+    }
+    if (candidateTime === null && currentTime !== null) return true;
+    if (candidateTime !== null && currentTime === null) return false;
+    return candidateIdx > currentIdx;
+  }
+
+  function getGradePoint(course) {
+    if (!course || !course.grade) return null;
+    const gp = gradeMap[course.grade];
+    return gp === undefined ? null : gp; // W/I/X → null
+  }
+
+  function isStrictlyLowerGradeThan(course, countedCourse) {
+    const thisGp = getGradePoint(course);
+    const countedGp = getGradePoint(countedCourse);
+    return (
+      (thisGp === null && countedGp !== null) ||
+      (thisGp !== null && countedGp !== null && thisGp < countedGp)
     );
-    const coursesByCode = {};
-    validCourses.forEach((course) => {
-      if (!coursesByCode[course.code]) coursesByCode[course.code] = [];
-      coursesByCode[course.code].push(course);
+  }
+
+  // Best grade wins for retakes; most recent breaks ties. Non-countable grades lose to any valid grade.
+  function isBetterCountedAttempt(candidate, current, candidateIdx, currentIdx) {
+    const candidateGp = getGradePoint(candidate);
+    const currentGp = getGradePoint(current);
+
+    if (candidateGp !== null && currentGp === null) return true;
+    if (candidateGp === null && currentGp !== null) return false;
+
+    if (candidateGp !== null && currentGp !== null && candidateGp !== currentGp) {
+      return candidateGp > currentGp;
+    }
+
+    return isLaterAttempt(candidate, current, candidateIdx, currentIdx);
+  }
+
+  function getCountedAttemptIndexByCode(courses) {
+    const countedByCode = {};
+    courses.forEach((course, idx) => {
+      if (!course || !course.code) return;
+      const code = course.code;
+      if (
+        countedByCode[code] === undefined ||
+        isBetterCountedAttempt(
+          course,
+          courses[countedByCode[code]],
+          idx,
+          countedByCode[code]
+        )
+      ) {
+        countedByCode[code] = idx;
+      }
     });
-    const bestGradeCourses = [];
-    Object.values(coursesByCode).forEach((courses) => {
-      courses.sort((a, b) => (gradeMap[b.grade] || 0) - (gradeMap[a.grade] || 0));
-      bestGradeCourses.push(courses[0]);
+    return countedByCode;
+  }
+
+  // Only the best (or most recent on tie) attempt keeps credits; other attempts become 0.
+  function applyRetakeCreditZeroing(courses) {
+    courses.forEach((course) => {
+      if (course.baseCredits === undefined) {
+        course.baseCredits = course.credits || 0;
+      }
+      course.credits = course.baseCredits;
     });
-    const totalPoints = bestGradeCourses.reduce(
-      (sum, c) => sum + (gradeMap[c.grade] || 0) * c.credits, 0
+
+    const countedByCode = getCountedAttemptIndexByCode(courses);
+    courses.forEach((course, idx) => {
+      if (!course.code) return;
+      if (countedByCode[course.code] !== idx) {
+        course.credits = 0;
+      }
+    });
+  }
+
+  function getNextNewCourseTitle() {
+    let maxN = 0;
+    semesterCourses.forEach((course) => {
+      const match = String(course.title || "").match(/^New course #(\d+)$/i);
+      if (match) maxN = Math.max(maxN, parseInt(match[1], 10));
+    });
+    return `New course #${maxN + 1}`;
+  }
+
+  function selectCountedCourses(courses) {
+    const countedByCode = getCountedAttemptIndexByCode(courses);
+    const counted = [];
+    courses.forEach((course, idx) => {
+      if (!course || !course.code) return;
+      if (countedByCode[course.code] !== idx) return;
+      if (
+        course.grade &&
+        gradeMap[course.grade] !== undefined &&
+        gradeMap[course.grade] !== null &&
+        (course.baseCredits !== undefined ? course.baseCredits : course.credits) > 0
+      ) {
+        const credits =
+          course.baseCredits !== undefined ? course.baseCredits : course.credits;
+        counted.push({ ...course, credits });
+      }
+    });
+    return counted;
+  }
+
+  function calcCgpaFromCourses(courses) {
+    const countedCourses = selectCountedCourses(courses);
+    const totalPoints = countedCourses.reduce(
+      (sum, c) => sum + (gradeMap[c.grade] || 0) * c.credits,
+      0
     );
-    const totalCredits = bestGradeCourses.reduce((sum, c) => sum + c.credits, 0);
+    const totalCredits = countedCourses.reduce((sum, c) => sum + c.credits, 0);
     return totalCredits ? (totalPoints / totalCredits).toFixed(2) : "—";
+  }
+
+  applyRetakeCreditZeroing(semesterCourses);
+
+  function calcCurrentCgpa() {
+    return calcCgpaFromCourses(originalCourses);
   }
 
   const currentCGPAValue = calcCurrentCgpa();
 
   function calcWhatIfCgpa(courses) {
-    const validCourses = courses.filter(
-      (c) =>
-        c.grade &&
-        gradeMap[c.grade] !== undefined &&
-        gradeMap[c.grade] !== null &&
-        c.credits > 0
-    );
-    const coursesByCode = {};
-    validCourses.forEach((course) => {
-      if (!coursesByCode[course.code]) coursesByCode[course.code] = [];
-      coursesByCode[course.code].push(course);
-    });
-    const bestGradeCourses = [];
-    Object.values(coursesByCode).forEach((courses) => {
-      courses.sort((a, b) => (gradeMap[b.grade] || 0) - (gradeMap[a.grade] || 0));
-      bestGradeCourses.push(courses[0]);
-    });
-    const totalPoints = bestGradeCourses.reduce(
-      (sum, c) => sum + (gradeMap[c.grade] || 0) * c.credits, 0
-    );
-    const totalCredits = bestGradeCourses.reduce((sum, c) => sum + c.credits, 0);
-    return totalCredits ? (totalPoints / totalCredits).toFixed(2) : "—";
+    return calcCgpaFromCourses(courses);
   }
 
   function renderInputs(courses) {
@@ -385,17 +473,46 @@
 
     const tbody = document.getElementById("course-inputs");
     let lastSemesterYear = null;
+    const countedByCode = getCountedAttemptIndexByCode(courses);
+    const retakeCodes = {};
+    courses.forEach((c) => {
+      if (!c || !c.code) return;
+      retakeCodes[c.code] = (retakeCodes[c.code] || 0) + 1;
+    });
 
     courses.forEach((c, i) => {
       const row = document.createElement("tr");
 
-      const isOriginalCourse = originalCourses.some((oc) => oc.code === c.code);
-      const originalCourse = originalCourses.find((oc) => oc.code === c.code);
-      const isGradeChanged = originalCourse && originalCourse.grade !== c.grade;
+      const isOriginalCourse = !c.userAdded;
+      const originalCourse = !c.userAdded
+        ? originalCourses.find(
+            (oc) =>
+              oc.code === c.code &&
+              oc.semester === c.semester &&
+              oc.year === c.year &&
+              oc.section === c.section
+          ) || originalCourses.find((oc) => oc.code === c.code && oc.grade === c.grade)
+        : null;
+      const matchedOriginal =
+        originalCourse ||
+        (!c.userAdded ? originalCourses.find((oc) => oc.code === c.code) : null);
+      const isGradeChanged = matchedOriginal && matchedOriginal.grade !== c.grade;
+      const isRetakeCourse = !!c.code && (retakeCodes[c.code] || 0) > 1;
+      const isCountedRetake =
+        isRetakeCourse && countedByCode[c.code] === i;
+      const isSupersededRetake =
+        isRetakeCourse && countedByCode[c.code] !== i;
 
       if (isGradeChanged) {
         row.style.backgroundColor = "#fff3cd";
         row.style.borderLeft = "3px solid #ffc107";
+      } else if (isCountedRetake) {
+        row.style.backgroundColor = "#e8f5e9";
+        row.style.borderLeft = "3px solid #28a745";
+      } else if (isSupersededRetake) {
+        row.style.backgroundColor = "#f8f9fa";
+        row.style.color = "#888";
+        row.style.borderLeft = "3px solid #ced4da";
       }
 
       const currentSemesterYear =
@@ -412,16 +529,31 @@
         tbody.appendChild(dividerRow);
       }
 
+      let retakeBadge = "";
+      if (isCountedRetake) {
+        retakeBadge =
+          ' <span class="label label-success" style="font-weight: normal; font-size: 10px; vertical-align: middle;" title="This course was retaken; the highest grade is used for CGPA (most recent wins ties)">Course retaken — highest grade</span>';
+      } else if (isSupersededRetake) {
+        const countedCourse = courses[countedByCode[c.code]];
+        if (isStrictlyLowerGradeThan(c, countedCourse)) {
+          retakeBadge =
+            ' <span class="label label-default" style="font-weight: normal; font-size: 10px; vertical-align: middle; background-color: #adb5bd;" title="A better grade exists for this course; these credits are not counted">Course retaken — Lower grade</span>';
+        } else {
+          retakeBadge =
+            ' <span class="label label-default" style="font-weight: normal; font-size: 10px; vertical-align: middle; background-color: #adb5bd;" title="Same grade as the counted attempt; the most recent attempt is used and these credits are not counted">Earlier attempt — credits not counted</span>';
+        }
+      }
+
       row.innerHTML = `
         <td style="font-size: 12px; color: #666; ${
           showSemesterInfo ? "font-weight: bold;" : ""
         }">${showSemesterInfo ? currentSemesterYear : ""}</td>
         <td>${c.code || "New Course"}</td>
-        <td>${c.title || "New Course Title"}</td>
+        <td>${c.title || "New Course Title"}${retakeBadge}</td>
         <td>
           <input type="number" data-idx="${i}" class="credit-input form-control"
                  value="${c.credits || 0}" min="0" max="5" step="0.5" style="width: 70px"
-                 ${isOriginalCourse ? "disabled" : ""}>
+                 ${isOriginalCourse || isSupersededRetake ? "disabled" : ""}>
         </td>
         <td>
           <select data-idx="${i}" data-code="${c.code}" class="grade-select form-control"
@@ -435,8 +567,8 @@
         <td>
           <div class="btn-group btn-group-sm">
             ${
-              isGradeChanged
-                ? `<button class="reset-grade btn btn-warning btn-sm" data-idx="${i}" data-original-grade="${originalCourse.grade}" title="Reset to original grade">
+              isGradeChanged && matchedOriginal
+                ? `<button class="reset-grade btn btn-warning btn-sm" data-idx="${i}" data-original-grade="${matchedOriginal.grade}" title="Reset to original grade">
                     <span class="glyphicon glyphicon-refresh"></span>
                   </button>`
                 : ""
@@ -481,6 +613,7 @@
         : e.target.closest(".remove-course");
       const idx = parseInt(button.dataset.idx);
       semesterCourses.splice(idx, 1);
+      applyRetakeCreditZeroing(semesterCourses);
       renderInputs(semesterCourses);
       update();
     }
@@ -504,6 +637,7 @@
 
   document.getElementById("reset-grades").addEventListener("click", () => {
     semesterCourses = JSON.parse(JSON.stringify(originalCourses));
+    applyRetakeCreditZeroing(semesterCourses);
     renderInputs(semesterCourses);
     document.getElementById("whatif-result").innerText = currentCGPAValue;
     document.getElementById("whatif-result").style.color = "#4285f4";
@@ -542,8 +676,8 @@
               <input type="text" class="form-control" id="new-course-code" placeholder="e.g. CSE115" required>
             </div>
             <div class="form-group">
-              <label for="new-course-title">Course Title*</label>
-              <input type="text" class="form-control" id="new-course-title" placeholder="e.g. Programming Language-I" required>
+              <label for="new-course-title">Course Title</label>
+              <input type="text" class="form-control" id="new-course-title" placeholder="Optional — defaults to New course #1, #2, ...">
             </div>
             <div class="form-group">
               <label for="new-course-credits">Credits*</label>
@@ -595,8 +729,8 @@
       const gradeInput = document.getElementById("new-course-grade");
       const errorEl = document.getElementById("course-validation-error");
 
-      if (!codeInput.value || !titleInput.value || !creditsInput.value || !gradeInput.value) {
-        errorEl.textContent = "Please fill in all required fields.";
+      if (!codeInput.value || !creditsInput.value || !gradeInput.value) {
+        errorEl.textContent = "Please fill in course code, credits, and grade.";
         errorEl.style.display = "block";
         return;
       }
@@ -609,13 +743,19 @@
       }
 
       const formattedCourseCode = codeInput.value.toUpperCase();
+      const trimmedTitle = titleInput.value.trim();
+      const credits = parseFloat(creditsInput.value);
 
       semesterCourses.push({
         code: formattedCourseCode,
-        title: titleInput.value,
-        credits: parseFloat(creditsInput.value),
+        title: trimmedTitle || getNextNewCourseTitle(),
+        credits: credits,
+        baseCredits: credits,
         grade: gradeInput.value,
+        userAdded: true,
       });
+
+      applyRetakeCreditZeroing(semesterCourses);
 
       closeAddCourseModal();
       renderInputs(semesterCourses);
@@ -657,59 +797,34 @@
     );
 
     selects.forEach((select) => {
-      const idx = parseInt(select.dataset.idx);
-      const courseCode = select.dataset.code;
+      const idx = parseInt(select.dataset.idx, 10);
       if (idx >= 0 && idx < semesterCourses.length) {
         semesterCourses[idx].grade = select.value;
-
-        const originalCourse = originalCourses.find((oc) => oc.code === courseCode);
-        const isOriginalCourse = !!originalCourse;
-        const isGradeChanged = isOriginalCourse && originalCourse.grade !== select.value;
-
-        const row = select.closest("tr");
-
-        if (isGradeChanged) {
-          row.style.backgroundColor = "#fff3cd";
-          row.style.borderLeft = "3px solid #ffc107";
-          select.style.backgroundColor = "#fff3cd";
-          select.style.fontWeight = "bold";
-
-          const actionsCell = row.querySelector("td:last-child .btn-group");
-          let resetButton = actionsCell.querySelector(".reset-grade");
-          if (!resetButton) {
-            resetButton = document.createElement("button");
-            resetButton.className = "reset-grade btn btn-warning btn-sm";
-            resetButton.dataset.idx = idx;
-            resetButton.dataset.originalGrade = originalCourse.grade;
-            resetButton.title = "Reset to original grade";
-            resetButton.innerHTML = '<span class="glyphicon glyphicon-refresh"></span>';
-            actionsCell.insertBefore(resetButton, actionsCell.firstChild);
-          }
-        } else if (isOriginalCourse) {
-          row.style.backgroundColor = "";
-          row.style.borderLeft = "";
-          select.style.backgroundColor = "";
-          select.style.fontWeight = "";
-          const resetButton = row.querySelector(".reset-grade");
-          if (resetButton) resetButton.remove();
-        }
       }
     });
 
     credits.forEach((input) => {
       if (!input.disabled) {
-        const idx = parseInt(input.dataset.idx);
+        const idx = parseInt(input.dataset.idx, 10);
         if (idx >= 0 && idx < semesterCourses.length) {
-          semesterCourses[idx].credits = parseFloat(input.value) || 0;
+          const value = parseFloat(input.value) || 0;
+          semesterCourses[idx].credits = value;
+          semesterCourses[idx].baseCredits = value;
         }
       }
     });
 
+    applyRetakeCreditZeroing(semesterCourses);
+    renderInputs(semesterCourses);
+
     const current = semesterCourses.map((c) => ({
       credits: c.credits || 0,
+      baseCredits: c.baseCredits,
       grade: c.grade,
       code: c.code,
       title: c.title,
+      semester: c.semester,
+      year: c.year,
     }));
 
     const currentCGPA = parseFloat(currentCGPAValue);
@@ -1184,12 +1299,21 @@
 
   function renderHeatmap(courses, container) {
     const filled = fillSemesterYear(courses);
-    const groups = {};
+    const countedByCode = getCountedAttemptIndexByCode(filled);
+    const codeCounts = {};
     filled.forEach((c) => {
+      if (!c || !c.code) return;
+      codeCounts[c.code] = (codeCounts[c.code] || 0) + 1;
+    });
+
+    const UNCOUNTED_RETAKE_COLOR = "#8e9aaf";
+
+    const groups = {};
+    filled.forEach((c, idx) => {
       if (!c.semester || !c.year) return;
       const key = `${c.semester} ${c.year}`;
       if (!groups[key]) groups[key] = [];
-      groups[key].push(c);
+      groups[key].push({ course: c, idx });
     });
     const semesters = sortSemesterKeys(Object.keys(groups));
 
@@ -1209,10 +1333,29 @@
     const html = semesters
       .map((key) => {
         const cells = groups[key]
-          .map((c) => {
-            const color = GRADE_COLORS[c.grade] || "#bdc3c7";
-            const tip = `${c.code} - ${c.title} (${c.grade || "—"})`;
-            return `<div title="${escapeHtml(tip)}" style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;background:${color};color:#fff;border-radius:6px;padding:6px 10px;margin:3px;font-size:11px;min-width:64px;font-weight:600;text-align:center;cursor:default;">
+          .map(({ course: c, idx }) => {
+            const isRetake = (codeCounts[c.code] || 0) > 1;
+            const isUncountedRetake =
+              isRetake && countedByCode[c.code] !== idx;
+            const color = isUncountedRetake
+              ? UNCOUNTED_RETAKE_COLOR
+              : GRADE_COLORS[c.grade] || "#bdc3c7";
+            const countedCourse = isUncountedRetake
+              ? filled[countedByCode[c.code]]
+              : null;
+            const tip = isUncountedRetake
+              ? `${c.code} - ${c.title} (${c.grade || "—"}) — uncounted retake (${
+                  isStrictlyLowerGradeThan(c, countedCourse)
+                    ? "lower grade"
+                    : "earlier attempt"
+                })`
+              : isRetake
+                ? `${c.code} - ${c.title} (${c.grade || "—"}) — counted (highest grade)`
+                : `${c.code} - ${c.title} (${c.grade || "—"})`;
+            const extraStyle = isUncountedRetake
+              ? "opacity:0.85;border:1px dashed rgba(255,255,255,0.7);background-image:repeating-linear-gradient(135deg,rgba(255,255,255,0.12) 0 4px,transparent 4px 8px);"
+              : "";
+            return `<div title="${escapeHtml(tip)}" style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;background:${color};color:#fff;border-radius:6px;padding:6px 10px;margin:3px;font-size:11px;min-width:64px;font-weight:600;text-align:center;cursor:default;${extraStyle}">
               <div style="font-size:11px;line-height:1.1;">${escapeHtml(c.code)}</div>
               <div style="font-size:14px;margin-top:2px;">${escapeHtml(c.grade || "—")}</div>
             </div>`;
@@ -1399,21 +1542,45 @@
       `;
     } else if (mode === "heatmap") {
       const filled = fillSemesterYear(originalCourses);
-      const semKeys = new Set();
-      let totalCourses = 0, totalCr = 0;
+      const countedByCode = getCountedAttemptIndexByCode(filled);
+      const codeCounts = {};
       filled.forEach((c) => {
+        if (!c || !c.code) return;
+        codeCounts[c.code] = (codeCounts[c.code] || 0) + 1;
+      });
+      const semKeys = new Set();
+      let totalCourses = 0, totalCr = 0, uncountedRetakes = 0;
+      filled.forEach((c, idx) => {
         if (!c.semester || !c.year) return;
         semKeys.add(`${c.semester} ${c.year}`);
         totalCourses += 1;
         totalCr += c.credits || 0;
+        if ((codeCounts[c.code] || 0) > 1 && countedByCode[c.code] !== idx) {
+          uncountedRetakes += 1;
+        }
       });
+      const gradeLegend = GRADE_ORDER.map(
+        (g) =>
+          `<div style="display:inline-flex;align-items:center;gap:4px;margin:0 8px 6px 0;">
+            <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${GRADE_COLORS[g]};"></span>
+            <small>${g}</small>
+          </div>`
+      ).join("");
       html = `
         <h4>Heatmap Overview</h4>
         <p>Your transcript at a glance, colored by grade.</p>
         <p><small>Hover over a tile for course details.</small></p>
+        <div style="margin-top: 12px;">
+          ${gradeLegend}
+          <div style="display:inline-flex;align-items:center;gap:4px;margin:0 8px 6px 0;">
+            <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#8e9aaf;background-image:repeating-linear-gradient(135deg,rgba(255,255,255,0.2) 0 3px,transparent 3px 6px);"></span>
+            <small>Retake</small>
+          </div>
+        </div>
         <div style="margin-top: 15px;">
           <p>Semesters: <strong>${semKeys.size}</strong></p>
           <p>Courses: <strong>${totalCourses}</strong></p>
+          <!--     <p>Retake: <strong>${uncountedRetakes}</strong></p>   -->
           <p>Total credits: <strong>${fmt(totalCr, 1)}</strong></p>
         </div>
       `;
